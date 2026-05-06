@@ -1,8 +1,8 @@
 # CSE 310 - Sprint Time Log
 
-Name:
+Name: Shengjian (John) Zhou
 
-Sprint #:
+Sprint #: 1
 
 ## Instructions
 
@@ -24,16 +24,10 @@ The expected minimum amount of time each Sprint for each category is as follows:
 
 ## Time Log
 
-|Date      |Start Time|Category|Description                                 |Total Minutes|
-|----------|----------|:------:|--------------------------------------------|:-----------:|
-|          |          |        |                                            |             |
-|          |          |        |                                            |             |
-|          |          |        |                                            |             |
-|          |          |        |                                            |             |
-|          |          |        |                                            |             |
-|          |          |        |                                            |             |
+|Start Time            |End Time              |Category   |Description                             |Total Time|
+|----------------------|----------------------|:---------:|----------------------------------------|:--------:|
+|Tue May  5 08:59:53 PM|Tue May  5 09:04:11 PM|Maintenance|Figured out how to paste date in neovim.|5 mins    |
 
-_Note: Add more rows as needed._
 
 ## Sprint Totals
 
