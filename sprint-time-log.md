@@ -24,9 +24,10 @@ The expected minimum amount of time each Sprint for each category is as follows:
 
 ## Time Log
 
-|Start Time            |End Time              |Category   |Description                             |Total Time|
-|----------------------|----------------------|:---------:|----------------------------------------|:--------:|
-|Tue May  5 08:59:53 PM|Tue May  5 09:04:11 PM|Maintenance|Figured out how to paste date in neovim.|5 mins    |
+| Start Time             | End Time               | Category | Description                                      | Total Time   |
+|------------------------|------------------------|:--------:|--------------------------------------------------|:------------:|
+| Tue May  5 08:59:53 PM | Tue May  5 09:04:11 PM |    IM    | Figured out how to paste date in neovim.         |    5 mins    |
+| Tue May  5 09:33:53 PM | Tue May  5 10:52:28 PM |    IM    | Planned Open Scriptures MVP and plan language.   | 1 hr 19 mins |
 
 
 ## Sprint Totals
