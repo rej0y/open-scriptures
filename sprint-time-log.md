@@ -28,13 +28,14 @@ The expected minimum amount of time each Sprint for each category is as follows:
 |------------------------|------------------------|:--------:|--------------------------------------------------|:------------:|
 | Tue May  5 08:59:53 PM | Tue May  5 09:04:11 PM |    IM    | Figured out how to paste date in neovim.         |    5 mins    |
 | Tue May  5 09:33:53 PM | Tue May  5 10:52:28 PM |    IM    | Planned Open Scriptures MVP and plan language.   | 1 hr 19 mins |
+| Wed May  6 11:29:59 AM | Wed May  6 12:33:39 PM |    IM    | Set up Tauri, SvelteKit, TypeScript app shell.   | 1 hr 4 mins  |
 
 
 ## Sprint Totals
 
 |Categroy                       |Total Time (Hours:Minutes)|
 |-------------------------------|:------------------------:|
-|IM - Individual Module         |                          |
+|IM - Individual Module         |          2:28            |
 |TP - Team Project              |                          |
 |MTG - Class Meetings           |                          |
-|**TOTAL**                      |                          |
+|**TOTAL**                      |        **2:28**          |
