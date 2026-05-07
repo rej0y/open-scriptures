@@ -16,7 +16,8 @@
         "width": 1100,
         "height": 760,
         "minWidth": 720,
-        "minHeight": 520
+        "minHeight": 520,
+        "decorations": false
       }
     ],
     "security": {
@@ -25,6 +26,9 @@
   },
   "bundle": {
     "active": false,
-    "targets": "all"
+    "targets": "all",
+    "resources": {
+      "resources/scriptures/church-of-jesus-christ-scriptures.db": "scriptures/church-of-jesus-christ-scriptures.db"
+    }
   }
 }

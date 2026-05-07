@@ -15,6 +15,7 @@
         at-spi2-atk
         atk
         cairo
+        dbus
         gdk-pixbuf
         glib
         gsettings-desktop-schemas
@@ -33,6 +34,7 @@
           pkgs.cargo-tauri
           pkgs.nodejs_22
           pkgs.pkg-config
+          pkgs.sqlite
         ] ++ tauriNativeDeps;
 
         LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath tauriNativeDeps;
