@@ -30,14 +30,14 @@ The expected minimum amount of time each Sprint for each category is as follows:
 | Tue May  5 09:33:53 PM | Tue May  5 10:52:28 PM |    IM    | Planned Open Scriptures MVP and plan language.   | 1 hr 19 mins |
 | Wed May  6 11:29:59 AM | Wed May  6 12:33:39 PM |    IM    | Set up Tauri, SvelteKit, TypeScript app shell.   | 1 hr 4 mins  |
 | Thu May  7 03:46:08 PM | Thu May  7 04:40:41 PM |    IM    | Built SQLite-backed scripture chapter reader.    |   55 mins    |
-| Thu May  7 04:40:41 PM |                        |    IM    | Started work session.                            |              |
+| Thu May  7 04:40:41 PM | Thu May  7 05:40:34 PM |    IM    | Added scripture navigation and chapter picker.   |     1 hr     |
 
 
 ## Sprint Totals
 
 |Categroy                       |Total Time (Hours:Minutes)|
 |-------------------------------|:------------------------:|
-|IM - Individual Module         |          3:23            |
+|IM - Individual Module         |          4:23            |
 |TP - Team Project              |                          |
 |MTG - Class Meetings           |                          |
-|**TOTAL**                      |        **3:23**          |
+|**TOTAL**                      |        **4:23**          |
