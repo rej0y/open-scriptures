@@ -876,7 +876,8 @@
   }
 
   .reader-shell-highlights-open {
-    --shell-max-width: 1180px;
+    --shell-max-width: 1560px;
+    grid-template-columns: var(--sidebar-width) minmax(0, 1fr) var(--drawer-width);
   }
 
   .reader-sidebar {
@@ -1133,17 +1134,16 @@
   }
 
   .highlights-drawer {
-    position: fixed;
+    position: sticky;
     top: var(--sticky-inset);
-    right: var(--sticky-inset);
-    bottom: var(--sticky-inset);
+    grid-column: 3;
     z-index: 30;
     display: grid;
     grid-template-rows: auto minmax(0, 1fr);
     gap: 1rem;
     min-width: 0;
-    width: min(28rem, calc(100vw - (var(--sticky-inset) * 2)));
-    max-height: none;
+    width: 100%;
+    max-height: var(--sticky-panel-max-height);
     overflow: hidden;
     overscroll-behavior: contain;
     padding: 1rem;
@@ -1445,11 +1445,18 @@
   }
 
   @media (max-width: 980px) {
+    .reader-shell-highlights-open {
+      --shell-max-width: 1180px;
+      grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+    }
+
     .reader-shell-highlights-open .highlights-drawer {
+      position: fixed;
       top: var(--sticky-inset);
       right: var(--sticky-inset);
       bottom: var(--sticky-inset);
       width: min(24rem, calc(100vw - (var(--sticky-inset) * 2)));
+      max-height: none;
     }
   }
 
