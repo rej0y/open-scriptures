@@ -27,6 +27,13 @@
         pango
         webkitgtk_4_1
       ];
+      gstreamerDeps = with pkgs.gst_all_1; [
+        gstreamer
+        gst-plugins-base
+        gst-plugins-good
+        gst-plugins-bad
+        gst-libav
+      ];
     in {
       devShells.${system}.default = pkgs.mkShell {
         packages = [
@@ -35,9 +42,10 @@
           pkgs.nodejs_22
           pkgs.pkg-config
           pkgs.sqlite
-        ] ++ tauriNativeDeps;
+        ] ++ tauriNativeDeps ++ gstreamerDeps;
 
-        LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath tauriNativeDeps;
+        LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath (tauriNativeDeps ++ gstreamerDeps);
+        GST_PLUGIN_SYSTEM_PATH_1_0 = pkgs.lib.makeSearchPathOutput "lib" "lib/gstreamer-1.0" gstreamerDeps;
         WEBKIT_DISABLE_COMPOSITING_MODE = "1";
 
         shellHook = ''

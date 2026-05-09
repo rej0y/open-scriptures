@@ -29,6 +29,16 @@ struct ScriptureBook {
     chapter_count: i64,
 }
 
+#[derive(Serialize)]
+struct ScriptureSearchResult {
+    volume: String,
+    book: String,
+    chapter: i64,
+    verse: i64,
+    reference: String,
+    text: String,
+}
+
 fn scriptures_db_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let resource_path = app
         .path()
@@ -167,11 +177,69 @@ fn get_chapter(
     Ok(chapter)
 }
 
+#[tauri::command]
+fn search_scriptures(
+    app: tauri::AppHandle,
+    query: String,
+) -> Result<Vec<ScriptureSearchResult>, String> {
+    let trimmed_query = query.trim();
+
+    if trimmed_query.len() < 2 {
+        return Ok(Vec::new());
+    }
+
+    let connection = open_scriptures_connection(&app)?;
+    let search_term = format!("%{}%", trimmed_query.to_lowercase());
+    let mut statement = connection
+        .prepare(
+            "
+            select
+              volume_title,
+              book_title,
+              chapter_number,
+              verse_number,
+              scripture_text
+            from scriptures
+            where lower(scripture_text) like ?1
+            order by volume_id, book_id, chapter_number, verse_number
+            limit 50
+            ",
+        )
+        .map_err(|error| format!("Could not prepare scripture search query: {error}"))?;
+
+    let results = statement
+        .query_map([search_term], |row| {
+            let volume: String = row.get(0)?;
+            let book: String = row.get(1)?;
+            let chapter: i64 = row.get(2)?;
+            let verse: i64 = row.get(3)?;
+            let text: String = row.get(4)?;
+
+            Ok(ScriptureSearchResult {
+                reference: format!("{book} {chapter}:{verse}"),
+                volume,
+                book,
+                chapter,
+                verse,
+                text,
+            })
+        })
+        .map_err(|error| format!("Could not query scripture search results: {error}"))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("Could not read scripture search results: {error}"))?;
+
+    Ok(results)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![list_books, get_chapter])
+        .invoke_handler(tauri::generate_handler![
+            list_books,
+            get_chapter,
+            search_scriptures
+        ])
         .run(tauri::generate_context!())
         .expect("error while running Tauri application");
 }
