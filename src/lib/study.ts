@@ -54,6 +54,16 @@ export type SavedHighlight = {
   words: SavedWord[];
 };
 
+export type ChapterBookmark = {
+  id: number;
+  title: string;
+  volume: string;
+  book: string;
+  chapter: number;
+  reference: string;
+  created_at: string;
+};
+
 export type VerseSegment = {
   text: string;
   savedWord?: SavedWord;

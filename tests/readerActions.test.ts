@@ -6,6 +6,7 @@ import { createReaderSavedWordActions } from '$lib/readerActionsSavedWords';
 import { createReaderSearchActions } from '$lib/readerActionsSearch';
 import type { ReaderActionDeps, ReaderActionState } from '$lib/readerActionsTypes';
 import type {
+  ChapterBookmark,
   SavedHighlight,
   SavedWord,
   ScriptureBook,
@@ -30,6 +31,11 @@ function createState(overrides: Partial<{
   hasSearched: boolean;
   isSearching: boolean;
   isLoadingSavedWords: boolean;
+  bookmarks: ChapterBookmark[];
+  bookmarkTitle: string;
+  bookmarkError: string;
+  isLoadingBookmarks: boolean;
+  isSavingBookmark: boolean;
   savedWordsError: string;
   savedWords: SavedWord[];
   isSavingSelection: boolean;
@@ -48,6 +54,11 @@ function createState(overrides: Partial<{
   let hasSearched = overrides.hasSearched ?? false;
   let isSearching = overrides.isSearching ?? false;
   let isLoadingSavedWords = overrides.isLoadingSavedWords ?? false;
+  let bookmarks = overrides.bookmarks ?? [];
+  let bookmarkTitle = overrides.bookmarkTitle ?? '';
+  let bookmarkError = overrides.bookmarkError ?? '';
+  let isLoadingBookmarks = overrides.isLoadingBookmarks ?? false;
+  let isSavingBookmark = overrides.isSavingBookmark ?? false;
   let savedWordsError = overrides.savedWordsError ?? '';
   let savedWords = overrides.savedWords ?? [];
   let isSavingSelection = overrides.isSavingSelection ?? false;
@@ -114,6 +125,26 @@ function createState(overrides: Partial<{
     setSavedWords: (value) => {
       savedWords = value;
     },
+    getBookmarks: () => bookmarks,
+    setBookmarks: (value) => {
+      bookmarks = value;
+    },
+    getBookmarkTitle: () => bookmarkTitle,
+    setBookmarkTitle: (value) => {
+      bookmarkTitle = value;
+    },
+    getBookmarkError: () => bookmarkError,
+    setBookmarkError: (value) => {
+      bookmarkError = value;
+    },
+    getIsLoadingBookmarks: () => isLoadingBookmarks,
+    setIsLoadingBookmarks: (value) => {
+      isLoadingBookmarks = value;
+    },
+    getIsSavingBookmark: () => isSavingBookmark,
+    setIsSavingBookmark: (value) => {
+      isSavingBookmark = value;
+    },
     getIsSavingSelection: () => isSavingSelection,
     setIsSavingSelection: (value) => {
       isSavingSelection = value;
@@ -140,6 +171,11 @@ function createState(overrides: Partial<{
       hasSearched,
       isSearching,
       isLoadingSavedWords,
+      bookmarks,
+      bookmarkTitle,
+      bookmarkError,
+      isLoadingBookmarks,
+      isSavingBookmark,
       savedWordsError,
       savedWords,
       isSavingSelection,
@@ -187,6 +223,35 @@ const savedHighlight: SavedHighlight = {
   words: [savedWord]
 };
 
+const baseDeps: ReaderActionDeps = {
+  invoke: noopInvoke,
+  loadBooks: async () => [],
+  loadChapter: async () => chapter,
+  searchScriptures: async () => [],
+  loadSavedWords: async () => [],
+  loadBookmarks: async () => [],
+  removeSavedWordRemote: async () => undefined,
+  removeSavedHighlightRemote: async () => undefined,
+  saveBookmarkRemote: async () => ({
+    id: 1,
+    title: 'Chapter bookmark',
+    volume: 'Book of Mormon',
+    book: '1 Nephi',
+    chapter: 2,
+    reference: '1 Nephi 2',
+    created_at: '2026-05-09T21:00:00.000Z'
+  }),
+  removeBookmarkRemote: async () => undefined,
+  persistSelection: async () => [],
+  getSelectedVerseParts: () => [],
+  removeSavedWordLocally: (words) => words,
+  removeSavedHighlightLocally: (words) => words,
+  refreshVisibleChapter: () => undefined,
+  queryVerseElement: () => null,
+  getSelection: () => null,
+  scrollHighlightIntoView: () => undefined
+};
+
 test('navigation openChapter sets loading state and loads the requested chapter', async () => {
   const calls: Array<[string, number]> = [];
   const { state, snapshot } = createState({
@@ -196,24 +261,14 @@ test('navigation openChapter sets loading state and loads the requested chapter'
   });
 
   const actions = createReaderNavigationActions(state, {
-    invoke: noopInvoke,
-    loadBooks: async () => [],
+    ...baseDeps,
     loadChapter: async (bookTitle, chapterNumber) => {
       calls.push([bookTitle, chapterNumber]);
       return chapter;
     },
-    searchScriptures: async () => [],
-    loadSavedWords: async () => [],
-    removeSavedWordRemote: async () => undefined,
-    removeSavedHighlightRemote: async () => undefined,
-    persistSelection: async () => [],
-    getSelectedVerseParts: () => [],
-    removeSavedWordLocally: (words) => words,
-    removeSavedHighlightLocally: (words) => words,
-    refreshVisibleChapter: () => undefined,
-    queryVerseElement: () => null,
-    getSelection: () => null,
-    scrollHighlightIntoView: () => undefined
+    loadBookmarks: async () => [],
+    saveBookmarkRemote: async () => baseDeps.saveBookmarkRemote('', '', '', 0),
+    removeBookmarkRemote: async () => undefined
   });
 
   await actions.openChapter('2 Nephi', 3);
@@ -229,23 +284,13 @@ test('navigation openChapter sets loading state and loads the requested chapter'
 test('navigation openChapter surfaces load errors', async () => {
   const { state, snapshot } = createState();
   const actions = createReaderNavigationActions(state, {
-    invoke: noopInvoke,
-    loadBooks: async () => [],
+    ...baseDeps,
     loadChapter: async () => {
       throw new Error('load failed');
     },
-    searchScriptures: async () => [],
-    loadSavedWords: async () => [],
-    removeSavedWordRemote: async () => undefined,
-    removeSavedHighlightRemote: async () => undefined,
-    persistSelection: async () => [],
-    getSelectedVerseParts: () => [],
-    removeSavedWordLocally: (words) => words,
-    removeSavedHighlightLocally: (words) => words,
-    refreshVisibleChapter: () => undefined,
-    queryVerseElement: () => null,
-    getSelection: () => null,
-    scrollHighlightIntoView: () => undefined
+    loadBookmarks: async () => [],
+    saveBookmarkRemote: async () => baseDeps.saveBookmarkRemote('', '', '', 0),
+    removeBookmarkRemote: async () => undefined
   });
 
   await actions.openChapter('2 Nephi', 3);
@@ -260,8 +305,7 @@ test('search handles short queries, success, and clear', async () => {
   const actions = createReaderSearchActions(
     state,
     {
-      invoke: noopInvoke,
-      loadBooks: async () => [],
+      ...baseDeps,
       loadChapter: async () => chapter,
       searchScriptures: async (query) => {
         calls.push(query);
@@ -276,18 +320,10 @@ test('search handles short queries, success, and clear', async () => {
           }
         ];
       },
-      loadSavedWords: async () => [],
-      removeSavedWordRemote: async () => undefined,
-      removeSavedHighlightRemote: async () => undefined,
-      persistSelection: async () => [],
-      getSelectedVerseParts: () => [],
-      removeSavedWordLocally: (words) => words,
-      removeSavedHighlightLocally: (words) => words,
-      refreshVisibleChapter: () => undefined,
-      queryVerseElement: () => null,
-      getSelection: () => null,
-      scrollHighlightIntoView: () => undefined
-    },
+      loadBookmarks: async () => [],
+      saveBookmarkRemote: async () => baseDeps.saveBookmarkRemote('', '', '', 0),
+      removeBookmarkRemote: async () => undefined
+    } satisfies ReaderActionDeps,
     async () => undefined
   );
 
@@ -320,10 +356,8 @@ test('saved word actions reload data after removal and expose chapter-local refr
   const actions = createReaderSavedWordActions(
     state,
     {
-      invoke: noopInvoke,
-      loadBooks: async () => [],
+      ...baseDeps,
       loadChapter: async () => chapter,
-      searchScriptures: async () => [],
       loadSavedWords: async () => {
         reloads.push(1);
         return loadedWords;
@@ -342,10 +376,10 @@ test('saved word actions reload data after removal and expose chapter-local refr
       refreshVisibleChapter: () => {
         refreshes.push(1);
       },
-      queryVerseElement: () => null,
-      getSelection: () => null,
-      scrollHighlightIntoView: () => undefined
-    },
+      loadBookmarks: async () => [],
+      saveBookmarkRemote: async () => baseDeps.saveBookmarkRemote('', '', '', 0),
+      removeBookmarkRemote: async () => undefined
+    } satisfies ReaderActionDeps,
     async () => {
       reloads.push(1);
       state.setSavedWords(loadedWords);

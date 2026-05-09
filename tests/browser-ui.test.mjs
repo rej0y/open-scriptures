@@ -292,6 +292,7 @@ function buildMockInvokeSource() {
         created_at: '2026-05-09T21:00:01.000Z'
       }
     ],
+    bookmarks: [],
     calls: []
   };
 
@@ -307,6 +308,8 @@ function buildMockInvokeSource() {
             return structuredClone(state.books);
           case 'list_saved_words':
             return structuredClone(state.savedWords);
+          case 'list_bookmarks':
+            return structuredClone(state.bookmarks);
           case 'get_chapter': {
             const key = \`\${args.book}:\${args.chapterNumber}\`;
             const chapter = state.chapters[key];
@@ -344,6 +347,32 @@ function buildMockInvokeSource() {
               end_offset: args.endOffset,
               created_at: new Date().toISOString()
             };
+          case 'save_bookmark': {
+            const nextBookmark = {
+              id: state.bookmarks.length + 1,
+              title: String(args.title ?? '').trim(),
+              volume: String(args.volume ?? ''),
+              book: String(args.book ?? ''),
+              chapter: Number(args.chapter ?? 0),
+              reference: String(args.book ?? '') + ' ' + String(args.chapter ?? ''),
+              created_at: new Date().toISOString()
+            };
+            state.bookmarks = [
+              nextBookmark,
+              ...state.bookmarks.filter(
+                (bookmark) =>
+                  !(
+                    bookmark.title === nextBookmark.title &&
+                    bookmark.book === nextBookmark.book &&
+                    bookmark.chapter === nextBookmark.chapter
+                  )
+              )
+            ];
+            return structuredClone(nextBookmark);
+          }
+          case 'remove_bookmark':
+            state.bookmarks = state.bookmarks.filter((bookmark) => bookmark.id !== args.id);
+            return undefined;
           case 'remove_saved_word':
             state.savedWords = state.savedWords.filter((word) => word.id !== args.id);
             return undefined;
@@ -368,6 +397,8 @@ async function createHarness() {
   await client.send('Page.addScriptToEvaluateOnNewDocument', {
     source: buildMockInvokeSource()
   });
+  await client.send('Page.navigate', { url: appUrl });
+  await waitFor(client, async () => (await getText(client, 'h1')) === '1 Nephi 1');
 
   return {
     appPort,
@@ -495,19 +526,13 @@ async function getCallCommands(client) {
   return await evaluate(client, 'globalThis.__OPEN_SCRIPTURES_CALLS__.map((call) => call.command)');
 }
 
-async function resetPage(client, url) {
-  await client.send('Page.navigate', { url });
-  await waitFor(client, async () => (await getText(client, 'h1')) === '1 Nephi 1');
-}
-
 test('browser UI integration', async (t) => {
-  const harness = await createHarness();
-  t.after(async () => {
-    await harness.close();
-  });
+  await t.test('renders the initial chapter and chapter-local highlights', async (t) => {
+    const harness = await createHarness();
+    t.after(async () => {
+      await harness.close();
+    });
 
-  await t.test('renders the initial chapter and chapter-local highlights', async () => {
-    await resetPage(harness.client, harness.appUrl);
     await waitFor(harness.client, async () => (await getText(harness.client, 'h1')) === '1 Nephi 1');
     await waitFor(harness.client, async () => (await getText(harness.client, '.saved-panel .panel-heading span')) === '1');
 
@@ -528,8 +553,12 @@ test('browser UI integration', async (t) => {
     assert.equal(await getText(harness.client, 'h1'), '1 Nephi 1');
   });
 
-  await t.test('chapter navigation buttons load adjacent chapters', async () => {
-    await resetPage(harness.client, harness.appUrl);
+  await t.test('chapter navigation buttons load adjacent chapters', async (t) => {
+    const harness = await createHarness();
+    t.after(async () => {
+      await harness.close();
+    });
+
     await clickSelector(harness.client, '.chapter-nav button[aria-label="Next chapter"]');
     await waitFor(harness.client, async () => (await getText(harness.client, 'h1')) === '1 Nephi 2');
 
@@ -538,5 +567,40 @@ test('browser UI integration', async (t) => {
 
     const commands = await getCallCommands(harness.client);
     assert(commands.filter((command) => command === 'get_chapter').length >= 3);
+  });
+
+  await t.test('chapter bookmarks save, reopen, and remove a chapter title', async (t) => {
+    const harness = await createHarness();
+    t.after(async () => {
+      await harness.close();
+    });
+
+    await clickSelector(harness.client, '.chapter-nav button[aria-label="Next chapter"]');
+    await waitFor(harness.client, async () => (await getText(harness.client, 'h1')) === '1 Nephi 2');
+
+    await typeIntoInput(harness.client, '.bookmark-form input[type="text"]', 'Lehi leaves');
+    await clickSelector(harness.client, '.bookmark-form button[type="submit"]');
+
+    await waitFor(harness.client, async () =>
+      (await getText(harness.client, '.bookmark-list .bookmark-link span')) === 'Lehi leaves'
+    );
+
+    await clickSelector(harness.client, '.chapter-nav button[aria-label="Previous chapter"]');
+    await waitFor(harness.client, async () => (await getText(harness.client, 'h1')) === '1 Nephi 1');
+
+    await clickSelector(harness.client, '.bookmark-list .bookmark-link');
+    await waitFor(harness.client, async () => (await getText(harness.client, 'h1')) === '1 Nephi 2');
+
+    await clickSelector(harness.client, '.remove-bookmark-button');
+    await waitFor(harness.client, async () =>
+      (await evaluate(
+        harness.client,
+        'document.querySelectorAll(".bookmark-list li").length'
+      )) === 0
+    );
+
+    const commands = await getCallCommands(harness.client);
+    assert(commands.includes('save_bookmark'));
+    assert(commands.includes('remove_bookmark'));
   });
 });

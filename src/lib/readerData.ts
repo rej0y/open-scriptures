@@ -1,4 +1,5 @@
 import type {
+  ChapterBookmark,
   SavedHighlight,
   SavedWord,
   ScriptureBook,
@@ -26,6 +27,10 @@ export function loadSavedWords() {
   return invoke<SavedWord[]>('list_saved_words');
 }
 
+export function loadBookmarks() {
+  return invoke<ChapterBookmark[]>('list_bookmarks');
+}
+
 export function removeSavedWord(savedWord: SavedWord) {
   return invoke('remove_saved_word', { id: savedWord.id });
 }
@@ -36,4 +41,17 @@ export function removeSavedHighlight(savedHighlight: SavedHighlight) {
       .filter((word) => word.id > 0)
       .map((word) => invoke('remove_saved_word', { id: word.id }))
   );
+}
+
+export function saveBookmark(title: string, volume: string, book: string, chapter: number) {
+  return invoke<ChapterBookmark>('save_bookmark', {
+    title,
+    volume,
+    book,
+    chapter
+  });
+}
+
+export function removeBookmark(bookmark: ChapterBookmark) {
+  return invoke('remove_bookmark', { id: bookmark.id });
 }

@@ -1,5 +1,6 @@
 import type { ReaderActionState } from '$lib/readerActionsTypes';
 import type {
+  ChapterBookmark,
   SavedWord,
   ScriptureBook,
   ScriptureChapter,
@@ -25,6 +26,11 @@ type ReaderStateBindings = {
   isLoadingSavedWords: Binding<boolean>;
   savedWordsError: Binding<string>;
   savedWords: Binding<SavedWord[]>;
+  bookmarks: Binding<ChapterBookmark[]>;
+  bookmarkTitle: Binding<string>;
+  bookmarkError: Binding<string>;
+  isLoadingBookmarks: Binding<boolean>;
+  isSavingBookmark: Binding<boolean>;
   isSavingSelection: Binding<boolean>;
   pendingSelectionParts: Binding<SelectionPart[]>;
 };
@@ -61,6 +67,16 @@ export function createReaderStateAdapter(bindings: ReaderStateBindings): ReaderA
     setSavedWordsError: bindings.savedWordsError[1],
     getSavedWords: bindings.savedWords[0],
     setSavedWords: bindings.savedWords[1],
+    getBookmarks: bindings.bookmarks[0],
+    setBookmarks: bindings.bookmarks[1],
+    getBookmarkTitle: bindings.bookmarkTitle[0],
+    setBookmarkTitle: bindings.bookmarkTitle[1],
+    getBookmarkError: bindings.bookmarkError[0],
+    setBookmarkError: bindings.bookmarkError[1],
+    getIsLoadingBookmarks: bindings.isLoadingBookmarks[0],
+    setIsLoadingBookmarks: bindings.isLoadingBookmarks[1],
+    getIsSavingBookmark: bindings.isSavingBookmark[0],
+    setIsSavingBookmark: bindings.isSavingBookmark[1],
     getIsSavingSelection: bindings.isSavingSelection[0],
     setIsSavingSelection: bindings.isSavingSelection[1],
     getPendingSelectionParts: bindings.pendingSelectionParts[0],

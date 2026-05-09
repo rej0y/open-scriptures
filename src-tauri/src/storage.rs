@@ -57,6 +57,17 @@ pub(crate) struct SavedWord {
     pub created_at: String,
 }
 
+#[derive(Serialize)]
+pub(crate) struct ChapterBookmark {
+    pub id: i64,
+    pub title: String,
+    pub volume: String,
+    pub book: String,
+    pub chapter: i64,
+    pub reference: String,
+    pub created_at: String,
+}
+
 pub(crate) fn scriptures_db_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let resource_path = app
         .path()
@@ -121,6 +132,16 @@ pub(crate) fn open_user_data_connection(app: &tauri::AppHandle) -> Result<Connec
               created_at text not null default (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
               unique(selection_id, book, chapter, verse, start_offset, end_offset, selected_text)
             );
+            create table if not exists bookmarks (
+              id integer primary key autoincrement,
+              title text not null,
+              volume text not null,
+              book text not null,
+              chapter integer not null,
+              reference text not null,
+              created_at text not null default (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+              unique(title, book, chapter)
+            );
             ",
         )
         .map_err(|error| format!("Could not prepare study data database: {error}"))?;
@@ -142,6 +163,18 @@ pub(crate) fn open_user_data_connection(app: &tauri::AppHandle) -> Result<Connec
     )?;
 
     Ok(connection)
+}
+
+pub(crate) fn row_to_bookmark(row: &rusqlite::Row<'_>) -> rusqlite::Result<ChapterBookmark> {
+    Ok(ChapterBookmark {
+        id: row.get(0)?,
+        title: row.get(1)?,
+        volume: row.get(2)?,
+        book: row.get(3)?,
+        chapter: row.get(4)?,
+        reference: row.get(5)?,
+        created_at: row.get(6)?,
+    })
 }
 
 fn ensure_saved_words_column(

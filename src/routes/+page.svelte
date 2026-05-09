@@ -4,6 +4,7 @@
   import HighlightsDrawer from '$lib/HighlightsDrawer.svelte';
   import ReaderSidebar from '$lib/ReaderSidebar.svelte';
   import {
+    type ChapterBookmark,
     highlightId,
     highlightKey,
     type SavedHighlight,
@@ -16,9 +17,12 @@
   import {
     loadBooks,
     loadChapter as fetchChapter,
+    loadBookmarks as fetchBookmarks,
     loadSavedWords as fetchSavedWords,
     removeSavedHighlight as removeSavedHighlightRemote,
+    removeBookmark as removeBookmarkRemote,
     removeSavedWord as removeSavedWordRemote,
+    saveBookmark as saveBookmarkRemote,
     searchScriptures
   } from '$lib/readerData';
   import {
@@ -50,6 +54,11 @@
   let hasSearched = false;
   let pendingSelectionParts: SelectionPart[] = [];
   let isHighlightsDrawerOpen = false;
+  let bookmarks: ChapterBookmark[] = [];
+  let bookmarkTitle = '';
+  let bookmarkError = '';
+  let isLoadingBookmarks = false;
+  let isSavingBookmark = false;
   let activeHighlightId = '';
   let savedWords: SavedWord[] = [];
   let savedHighlights: SavedHighlight[] = [];
@@ -71,6 +80,11 @@
     isLoadingSavedWords: [() => isLoadingSavedWords, (value) => (isLoadingSavedWords = value)],
     savedWordsError: [() => savedWordsError, (value) => (savedWordsError = value)],
     savedWords: [() => savedWords, (value) => (savedWords = value)],
+    bookmarks: [() => bookmarks, (value) => (bookmarks = value)],
+    bookmarkTitle: [() => bookmarkTitle, (value) => (bookmarkTitle = value)],
+    bookmarkError: [() => bookmarkError, (value) => (bookmarkError = value)],
+    isLoadingBookmarks: [() => isLoadingBookmarks, (value) => (isLoadingBookmarks = value)],
+    isSavingBookmark: [() => isSavingBookmark, (value) => (isSavingBookmark = value)],
     isSavingSelection: [() => isSavingSelection, (value) => (isSavingSelection = value)],
     pendingSelectionParts: [
       () => pendingSelectionParts,
@@ -83,9 +97,12 @@
     loadBooks,
     loadChapter: fetchChapter,
     searchScriptures,
+    loadBookmarks: fetchBookmarks,
     loadSavedWords: fetchSavedWords,
     removeSavedWordRemote,
     removeSavedHighlightRemote,
+    saveBookmarkRemote,
+    removeBookmarkRemote,
     persistSelection,
     getSelectedVerseParts,
     removeSavedWordLocally,
@@ -155,6 +172,7 @@
   <ReaderSidebar
     bind:pendingBook
     bind:selectedChapter
+    bind:bookmarkTitle
     books={books}
     isLoading={isLoading}
     isSearching={isSearching}
@@ -163,6 +181,10 @@
     searchResults={searchResults}
     hasSearched={hasSearched}
     chapterOptions={chapterOptions}
+    bookmarks={bookmarks}
+    bookmarkError={bookmarkError}
+    isLoadingBookmarks={isLoadingBookmarks}
+    isSavingBookmark={isSavingBookmark}
     savedHighlights={savedHighlights}
     isSavingSelection={isSavingSelection}
     isLoadingSavedWords={isLoadingSavedWords}
@@ -173,6 +195,9 @@
     onClearSearch={readerActions.clearSearch}
     openSearchResult={readerActions.openSearchResult}
     openHighlightsDrawer={openHighlightsDrawer}
+    onSaveBookmark={readerActions.saveCurrentBookmark}
+    onOpenBookmark={readerActions.openBookmark}
+    onRemoveBookmark={readerActions.removeBookmark}
   />
 
   <ChapterView

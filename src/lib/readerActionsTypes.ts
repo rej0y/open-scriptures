@@ -1,4 +1,5 @@
 import type {
+  ChapterBookmark,
   SavedHighlight,
   SavedWord,
   ScriptureBook,
@@ -39,6 +40,16 @@ export type ReaderActionState = {
   setSavedWordsError: (value: string) => void;
   getSavedWords: () => SavedWord[];
   setSavedWords: (value: SavedWord[]) => void;
+  getBookmarks: () => ChapterBookmark[];
+  setBookmarks: (value: ChapterBookmark[]) => void;
+  getBookmarkTitle: () => string;
+  setBookmarkTitle: (value: string) => void;
+  getIsLoadingBookmarks: () => boolean;
+  setIsLoadingBookmarks: (value: boolean) => void;
+  getIsSavingBookmark: () => boolean;
+  setIsSavingBookmark: (value: boolean) => void;
+  getBookmarkError: () => string;
+  setBookmarkError: (value: string) => void;
   getIsSavingSelection: () => boolean;
   setIsSavingSelection: (value: boolean) => void;
   getPendingSelectionParts: () => SelectionPart[];
@@ -51,8 +62,16 @@ export type ReaderActionDeps = {
   loadChapter: (bookTitle: string, chapterNumber: number) => Promise<ScriptureChapter>;
   searchScriptures: (query: string) => Promise<ScriptureSearchResult[]>;
   loadSavedWords: () => Promise<SavedWord[]>;
+  loadBookmarks: () => Promise<ChapterBookmark[]>;
   removeSavedWordRemote: (savedWord: SavedWord) => Promise<unknown>;
   removeSavedHighlightRemote: (savedHighlight: SavedHighlight) => Promise<unknown>;
+  saveBookmarkRemote: (
+    title: string,
+    volume: string,
+    book: string,
+    chapter: number
+  ) => Promise<ChapterBookmark>;
+  removeBookmarkRemote: (bookmark: ChapterBookmark) => Promise<unknown>;
   persistSelection: (
     invoke: InvokeFunction,
     chapter: ScriptureChapter,

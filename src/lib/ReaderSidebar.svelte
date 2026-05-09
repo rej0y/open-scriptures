@@ -1,5 +1,6 @@
 <script lang="ts">
   import type {
+    ChapterBookmark,
     SavedHighlight,
     ScriptureBook,
     ScriptureSearchResult
@@ -15,6 +16,11 @@
   export let searchResults: ScriptureSearchResult[] = [];
   export let hasSearched = false;
   export let chapterOptions: number[] = [];
+  export let bookmarks: ChapterBookmark[] = [];
+  export let bookmarkTitle = '';
+  export let bookmarkError = '';
+  export let isLoadingBookmarks = false;
+  export let isSavingBookmark = false;
   export let savedHighlights: SavedHighlight[] = [];
   export let isSavingSelection = false;
   export let isLoadingSavedWords = false;
@@ -25,6 +31,9 @@
   export let onClearSearch = () => {};
   export let openSearchResult = async (_result: ScriptureSearchResult) => {};
   export let openHighlightsDrawer = () => {};
+  export let onSaveBookmark = async () => {};
+  export let onOpenBookmark = async (_bookmark: ChapterBookmark) => {};
+  export let onRemoveBookmark = async (_bookmark: ChapterBookmark) => {};
 
   let chapterSelect: HTMLSelectElement;
 
@@ -131,6 +140,56 @@
     >
       Open highlights
     </button>
+  </section>
+
+  <section class="bookmark-panel" aria-label="Chapter bookmarks">
+    <div class="panel-heading">
+      <h2>Bookmarks</h2>
+      <span>{bookmarks.length}</span>
+    </div>
+
+    <form class="bookmark-form" on:submit|preventDefault={onSaveBookmark}>
+      <label>
+        <span>Title</span>
+        <input
+          type="text"
+          bind:value={bookmarkTitle}
+          placeholder="Name this chapter"
+          disabled={isSavingBookmark}
+        />
+      </label>
+
+      <button type="submit" disabled={isSavingBookmark || bookmarkTitle.trim().length === 0}>
+        {isSavingBookmark ? 'Saving' : 'Save chapter'}
+      </button>
+    </form>
+
+    {#if bookmarkError}
+      <p class="panel-status" role="alert">{bookmarkError}</p>
+    {:else if isLoadingBookmarks}
+      <p class="panel-status">Loading bookmarks...</p>
+    {:else if bookmarks.length === 0}
+      <p class="panel-status">No chapter bookmarks yet.</p>
+    {:else}
+      <ol class="bookmark-list" aria-label="Chapter bookmarks">
+        {#each bookmarks as bookmark}
+          <li>
+            <button type="button" class="bookmark-link" on:click={() => onOpenBookmark(bookmark)}>
+              <span>{bookmark.title}</span>
+              <small>{bookmark.reference}</small>
+            </button>
+            <button
+              type="button"
+              class="remove-bookmark-button"
+              aria-label="Remove bookmark"
+              on:click|stopPropagation={() => onRemoveBookmark(bookmark)}
+            >
+              Remove
+            </button>
+          </li>
+        {/each}
+      </ol>
+    {/if}
   </section>
 </aside>
 
@@ -263,6 +322,18 @@
     background: #2f6f68;
   }
 
+  .bookmark-panel {
+    display: grid;
+    gap: 0.75rem;
+    min-width: 0;
+    width: 100%;
+    padding: 0.8rem;
+    border: 1px solid rgba(29, 37, 45, 0.09);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.82);
+    box-shadow: 0 16px 40px rgba(29, 37, 45, 0.06);
+  }
+
   .search-actions button:disabled {
     cursor: default;
     opacity: 0.55;
@@ -321,6 +392,138 @@
 
   .search-results li {
     min-width: 0;
+  }
+
+  .bookmark-form {
+    display: grid;
+    gap: 0.55rem;
+  }
+
+  .bookmark-form label {
+    display: grid;
+    gap: 0.4rem;
+    color: #52605b;
+    font-size: 0.7rem;
+    font-weight: 800;
+    letter-spacing: 0;
+    text-transform: uppercase;
+  }
+
+  .bookmark-form input {
+    min-width: 0;
+    min-height: 2.55rem;
+    width: 100%;
+    border: 1px solid rgba(29, 37, 45, 0.12);
+    border-radius: 6px;
+    padding: 0 0.75rem;
+    color: #182127;
+    background: #ffffff;
+    font: inherit;
+    font-size: 0.9rem;
+    font-weight: 750;
+  }
+
+  .bookmark-form input:focus-visible,
+  .bookmark-form button:focus-visible,
+  .bookmark-link:focus-visible,
+  .remove-bookmark-button:focus-visible {
+    outline: 3px solid rgba(47, 111, 104, 0.2);
+    outline-offset: 2px;
+  }
+
+  .bookmark-form button {
+    min-width: 0;
+    min-height: 2.35rem;
+    padding: 0 0.7rem;
+    border: 1px solid #2f6f68;
+    border-radius: 6px;
+    color: #ffffff;
+    background: #2f6f68;
+    font: inherit;
+    font-size: 0.82rem;
+    font-weight: 800;
+    cursor: pointer;
+  }
+
+  .bookmark-form button:disabled {
+    cursor: default;
+    opacity: 0.55;
+  }
+
+  .bookmark-list {
+    display: grid;
+    gap: 0.55rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .bookmark-list li {
+    display: grid;
+    gap: 0.35rem;
+    padding: 0.65rem 0;
+    border-top: 1px solid rgba(29, 37, 45, 0.08);
+  }
+
+  .bookmark-link {
+    display: grid;
+    gap: 0.18rem;
+    width: 100%;
+    min-width: 0;
+    border: 0;
+    border-radius: 6px;
+    padding: 0.2rem 0.3rem;
+    color: #252b31;
+    background: transparent;
+    font: inherit;
+    text-align: left;
+    overflow-wrap: anywhere;
+    cursor: pointer;
+  }
+
+  .bookmark-link:hover {
+    background: rgba(47, 111, 104, 0.08);
+  }
+
+  .bookmark-link span {
+    color: #182127;
+    font-size: 0.88rem;
+    font-weight: 800;
+    line-height: 1.25;
+  }
+
+  .bookmark-link {
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 1rem;
+    line-height: 1.45;
+  }
+
+  .bookmark-link small {
+    color: #6b756f;
+    font-family:
+      Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 0.72rem;
+    font-weight: 850;
+    line-height: 1.2;
+    text-transform: uppercase;
+  }
+
+  .remove-bookmark-button {
+    justify-self: start;
+    border: 0;
+    border-radius: 6px;
+    padding: 0.3rem 0.45rem;
+    color: #52605b;
+    background: transparent;
+    font: inherit;
+    font-size: 0.74rem;
+    font-weight: 850;
+    line-height: 1;
+    cursor: pointer;
+  }
+
+  .remove-bookmark-button:hover {
+    background: rgba(47, 111, 104, 0.08);
   }
 
   .search-results li {
