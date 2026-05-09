@@ -32,11 +32,24 @@
     text: string;
   };
 
+  type SavedPassage = {
+    id: number;
+    volume: string;
+    book: string;
+    chapter: number;
+    verse: number;
+    reference: string;
+    text: string;
+    created_at: string;
+  };
+
   let books: ScriptureBook[] = [];
   let chapter: ScriptureChapter | null = null;
   let errorMessage = '';
   let isLoading = true;
   let isSearching = false;
+  let isLoadingSavedPassages = false;
+  let savingVerseKey = '';
   let selectedBook = '1 Nephi';
   let selectedChapter = 1;
   let pendingBook = selectedBook;
@@ -45,13 +58,22 @@
   let searchError = '';
   let searchResults: ScriptureSearchResult[] = [];
   let hasSearched = false;
+  let savedPassages: SavedPassage[] = [];
+  let savedPassagesError = '';
 
   $: pendingBookInfo = books.find((book) => book.title === pendingBook);
   $: totalVerses = chapter?.verses.length ?? 0;
+  $: savedVerseKeys = new Set(
+    savedPassages.map((passage) => passageKey(passage.book, passage.chapter, passage.verse))
+  );
   $: chapterOptions = Array.from(
     { length: pendingBookInfo?.chapter_count ?? chapter?.chapter ?? 1 },
     (_, index) => index + 1
   );
+
+  function passageKey(book: string, chapterNumber: number, verseNumber: number) {
+    return `${book}:${chapterNumber}:${verseNumber}`;
+  }
 
   async function loadChapter(bookTitle = selectedBook, chapterNumber = selectedChapter) {
     isLoading = true;
@@ -119,9 +141,84 @@
     await loadChapter(result.book, result.chapter);
   }
 
+  async function loadSavedPassages() {
+    isLoadingSavedPassages = true;
+    savedPassagesError = '';
+
+    try {
+      savedPassages = await invoke<SavedPassage[]>('list_saved_passages');
+    } catch (error) {
+      savedPassagesError = error instanceof Error ? error.message : String(error);
+    } finally {
+      isLoadingSavedPassages = false;
+    }
+  }
+
+  async function saveVerse(verse: ChapterVerse) {
+    if (!chapter) return;
+
+    const key = passageKey(chapter.book, chapter.chapter, verse.number);
+    savingVerseKey = key;
+    savedPassagesError = '';
+
+    try {
+      const savedPassage = await invoke<SavedPassage>('save_passage', {
+        book: chapter.book,
+        chapter: chapter.chapter,
+        verse: verse.number
+      });
+
+      savedPassages = [
+        savedPassage,
+        ...savedPassages.filter((passage) => passage.id !== savedPassage.id)
+      ];
+    } catch (error) {
+      savedPassagesError = error instanceof Error ? error.message : String(error);
+    } finally {
+      savingVerseKey = '';
+    }
+  }
+
+  async function removeSavedPassage(passage: SavedPassage) {
+    const key = passageKey(passage.book, passage.chapter, passage.verse);
+    savingVerseKey = key;
+    savedPassagesError = '';
+
+    try {
+      await invoke('remove_saved_passage', { id: passage.id });
+      savedPassages = savedPassages.filter((savedPassage) => savedPassage.id !== passage.id);
+    } catch (error) {
+      savedPassagesError = error instanceof Error ? error.message : String(error);
+    } finally {
+      savingVerseKey = '';
+    }
+  }
+
+  async function toggleSavedVerse(verse: ChapterVerse) {
+    if (!chapter) return;
+
+    const existingPassage = savedPassages.find(
+      (passage) =>
+        passage.book === chapter?.book &&
+        passage.chapter === chapter.chapter &&
+        passage.verse === verse.number
+    );
+
+    if (existingPassage) {
+      await removeSavedPassage(existingPassage);
+    } else {
+      await saveVerse(verse);
+    }
+  }
+
+  async function openSavedPassage(passage: SavedPassage) {
+    await loadChapter(passage.book, passage.chapter);
+  }
+
   onMount(async () => {
     try {
       books = await invoke<ScriptureBook[]>('list_books');
+      await loadSavedPassages();
       await loadChapter(selectedBook, selectedChapter);
     } catch (error) {
       errorMessage = error instanceof Error ? error.message : String(error);
@@ -233,6 +330,42 @@
         </ol>
       {/if}
     </section>
+
+    <section class="saved-panel" aria-label="Saved passages">
+      <div class="panel-heading">
+        <h2>Saved</h2>
+        <span>{savedPassages.length}</span>
+      </div>
+
+      {#if savedPassagesError}
+        <p class="panel-status" role="alert">{savedPassagesError}</p>
+      {:else if isLoadingSavedPassages}
+        <p class="panel-status">Loading saved passages...</p>
+      {:else if savedPassages.length === 0}
+        <p class="panel-status">No saved passages yet.</p>
+      {:else}
+        <ol class="saved-passages" aria-label="Saved passages">
+          {#each savedPassages as passage}
+            <li>
+              <button type="button" class="saved-link" on:click={() => openSavedPassage(passage)}>
+                <span>{passage.reference}</span>
+                <small>{passage.volume}</small>
+                <p>{passage.text}</p>
+              </button>
+              <button
+                type="button"
+                class="remove-saved-button"
+                aria-label={`Remove ${passage.reference} from saved passages`}
+                disabled={savingVerseKey === passageKey(passage.book, passage.chapter, passage.verse)}
+                on:click={() => removeSavedPassage(passage)}
+              >
+                Remove
+              </button>
+            </li>
+          {/each}
+        </ol>
+      {/if}
+    </section>
   </aside>
 
   <article class="chapter-view" aria-labelledby="chapter-title">
@@ -259,10 +392,23 @@
 
       <div class="verses" aria-label={`${chapter.reference} verses`}>
         {#each chapter.verses as verse}
-          <p>
-            <span>{verse.number}</span>
-            {verse.text}
-          </p>
+          {@const verseKey = passageKey(chapter.book, chapter.chapter, verse.number)}
+          {@const isSaved = savedVerseKeys.has(verseKey)}
+          <div class:verse-row-saved={isSaved} class="verse-row">
+            <p>
+              <span>{verse.number}</span>
+              {verse.text}
+            </p>
+            <button
+              type="button"
+              class="save-verse-button"
+              aria-pressed={isSaved}
+              disabled={savingVerseKey === verseKey}
+              on:click={() => toggleSavedVerse(verse)}
+            >
+              {isSaved ? 'Saved' : 'Save'}
+            </button>
+          </div>
         {/each}
       </div>
 
@@ -308,7 +454,8 @@
   }
 
   .reader-toolbar,
-  .search-panel {
+  .search-panel,
+  .saved-panel {
     display: grid;
     width: 100%;
     padding: 0.8rem;
@@ -323,7 +470,8 @@
   }
 
   .search-panel,
-  .search-form {
+  .search-form,
+  .saved-panel {
     gap: 0.75rem;
   }
 
@@ -361,6 +509,8 @@
   .search-form input:focus-visible,
   .search-actions button:focus-visible,
   .search-results button:focus-visible,
+  .saved-passages button:focus-visible,
+  .save-verse-button:focus-visible,
   .chapter-nav button:focus-visible {
     outline: 3px solid rgba(47, 111, 104, 0.2);
     outline-offset: 2px;
@@ -377,7 +527,9 @@
   }
 
   .search-actions button,
-  .search-results button {
+  .search-results button,
+  .saved-passages button,
+  .save-verse-button {
     border: 1px solid rgba(29, 37, 45, 0.12);
     border-radius: 6px;
     color: #182127;
@@ -408,14 +560,45 @@
     color: #52605b;
   }
 
-  .search-status {
+  .search-status,
+  .panel-status {
     margin: 0;
     color: #56615c;
     font-size: 0.82rem;
     line-height: 1.45;
   }
 
-  .search-results {
+  .panel-heading {
+    display: flex;
+    gap: 0.55rem;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .panel-heading h2 {
+    margin: 0;
+    color: #182127;
+    font-size: 0.82rem;
+    font-weight: 850;
+    letter-spacing: 0;
+    text-transform: uppercase;
+  }
+
+  .panel-heading span {
+    display: inline-grid;
+    min-width: 1.65rem;
+    min-height: 1.65rem;
+    place-items: center;
+    border-radius: 999px;
+    color: #ffffff;
+    background: #2f6f68;
+    font-size: 0.72rem;
+    font-weight: 850;
+    line-height: 1;
+  }
+
+  .search-results,
+  .saved-passages {
     display: grid;
     gap: 0.55rem;
     max-height: min(42vh, 28rem);
@@ -425,7 +608,17 @@
     list-style: none;
   }
 
-  .search-results button {
+  .saved-passages {
+    max-height: min(34vh, 22rem);
+  }
+
+  .saved-passages li {
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  .search-results button,
+  .saved-link {
     display: grid;
     gap: 0.18rem;
     width: 100%;
@@ -436,19 +629,24 @@
       background 150ms ease;
   }
 
-  .search-results button:hover {
+  .search-results button:hover,
+  .saved-link:hover,
+  .remove-saved-button:hover,
+  .save-verse-button:hover {
     border-color: rgba(47, 111, 104, 0.34);
     background: #f5f8f7;
   }
 
-  .search-results span {
+  .search-results span,
+  .saved-passages span {
     color: #182127;
     font-size: 0.88rem;
     font-weight: 800;
     line-height: 1.25;
   }
 
-  .search-results small {
+  .search-results small,
+  .saved-passages small {
     color: #6b756f;
     font-size: 0.72rem;
     font-weight: 800;
@@ -456,7 +654,8 @@
     text-transform: uppercase;
   }
 
-  .search-results p {
+  .search-results p,
+  .saved-passages p {
     display: -webkit-box;
     margin: 0.15rem 0 0;
     overflow: hidden;
@@ -466,6 +665,21 @@
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 3;
     line-clamp: 3;
+  }
+
+  .remove-saved-button {
+    justify-self: start;
+    min-height: 1.9rem;
+    padding: 0 0.55rem;
+    color: #52605b;
+    font-size: 0.74rem;
+    font-weight: 800;
+  }
+
+  .saved-passages button:disabled,
+  .save-verse-button:disabled {
+    cursor: default;
+    opacity: 0.55;
   }
 
   .chapter-view {
@@ -586,9 +800,23 @@
 
   .verses {
     display: grid;
-    gap: 1rem;
+    gap: 0.9rem;
     max-width: 760px;
     font-family: Georgia, "Times New Roman", serif;
+  }
+
+  .verse-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 1rem;
+    align-items: start;
+    padding: 0.25rem 0 0.25rem 0.75rem;
+    border-left: 3px solid transparent;
+  }
+
+  .verse-row-saved {
+    border-left-color: #2f6f68;
+    background: linear-gradient(90deg, rgba(47, 111, 104, 0.07), transparent 45%);
   }
 
   .verses p {
@@ -609,6 +837,28 @@
     font-weight: 800;
     line-height: 1;
     transform: translateY(-0.08em);
+  }
+
+  .save-verse-button {
+    min-width: 4.2rem;
+    min-height: 2rem;
+    padding: 0 0.65rem;
+    color: #52605b;
+    font-family:
+      Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 0.74rem;
+    font-weight: 850;
+  }
+
+  .save-verse-button[aria-pressed='true'] {
+    color: #ffffff;
+    border-color: #2f6f68;
+    background: #2f6f68;
+  }
+
+  .save-verse-button[aria-pressed='true']:hover {
+    color: #182127;
+    background: #f5f8f7;
   }
 
   .empty-state,
@@ -641,7 +891,8 @@
     }
 
     .reader-toolbar,
-    .search-panel {
+    .search-panel,
+    .saved-panel {
       grid-template-columns: minmax(0, 1fr) minmax(5.5rem, 7rem);
       gap: 0.75rem;
       align-items: end;
@@ -651,12 +902,14 @@
       background: transparent;
     }
 
-    .search-panel {
+    .search-panel,
+    .saved-panel {
       display: block;
       padding-top: 0;
     }
 
-    .search-results {
+    .search-results,
+    .saved-passages {
       grid-template-columns: repeat(2, minmax(0, 1fr));
       max-height: 14rem;
       margin-top: 0.75rem;
@@ -672,12 +925,23 @@
 
   @media (max-width: 500px) {
     .reader-toolbar,
-    .search-panel {
+    .search-panel,
+    .saved-panel {
       grid-template-columns: 1fr;
     }
 
-    .search-results {
+    .search-results,
+    .saved-passages {
       grid-template-columns: 1fr;
+    }
+
+    .verse-row {
+      grid-template-columns: 1fr;
+      gap: 0.55rem;
+    }
+
+    .save-verse-button {
+      justify-self: start;
     }
 
     .chapter-nav {

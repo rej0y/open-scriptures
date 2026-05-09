@@ -1,9 +1,11 @@
-use rusqlite::{Connection, OpenFlags};
+use rusqlite::{params, Connection, OpenFlags};
 use serde::Serialize;
+use std::fs;
 use std::path::PathBuf;
 use tauri::{path::BaseDirectory, Manager};
 
 const SCRIPTURES_DB_RESOURCE: &str = "scriptures/church-of-jesus-christ-scriptures.db";
+const USER_DATA_DB_FILE: &str = "open-scriptures-study.db";
 
 #[derive(Serialize)]
 struct ChapterVerse {
@@ -39,6 +41,18 @@ struct ScriptureSearchResult {
     text: String,
 }
 
+#[derive(Serialize)]
+struct SavedPassage {
+    id: i64,
+    volume: String,
+    book: String,
+    chapter: i64,
+    verse: i64,
+    reference: String,
+    text: String,
+    created_at: String,
+}
+
 fn scriptures_db_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let resource_path = app
         .path()
@@ -68,6 +82,63 @@ fn open_scriptures_connection(app: &tauri::AppHandle) -> Result<Connection, Stri
 
     Connection::open_with_flags(db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
         .map_err(|error| format!("Could not open scriptures database: {error}"))
+}
+
+fn user_data_db_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| format!("Could not resolve app data directory: {error}"))?;
+
+    fs::create_dir_all(&data_dir)
+        .map_err(|error| format!("Could not create app data directory: {error}"))?;
+
+    Ok(data_dir.join(USER_DATA_DB_FILE))
+}
+
+fn open_user_data_connection(app: &tauri::AppHandle) -> Result<Connection, String> {
+    let connection = Connection::open(user_data_db_path(app)?)
+        .map_err(|error| format!("Could not open study data database: {error}"))?;
+
+    connection
+        .execute_batch(
+            "
+            create table if not exists saved_passages (
+              id integer primary key autoincrement,
+              volume text not null,
+              book text not null,
+              chapter integer not null,
+              verse integer not null,
+              text text not null,
+              created_at text not null default (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+              unique(book, chapter, verse)
+            );
+            ",
+        )
+        .map_err(|error| format!("Could not prepare study data database: {error}"))?;
+
+    Ok(connection)
+}
+
+fn row_to_saved_passage(row: &rusqlite::Row<'_>) -> rusqlite::Result<SavedPassage> {
+    let id = row.get(0)?;
+    let volume = row.get(1)?;
+    let book: String = row.get(2)?;
+    let chapter: i64 = row.get(3)?;
+    let verse: i64 = row.get(4)?;
+    let text = row.get(5)?;
+    let created_at = row.get(6)?;
+
+    Ok(SavedPassage {
+        id,
+        volume,
+        reference: format!("{book} {chapter}:{verse}"),
+        book,
+        chapter,
+        verse,
+        text,
+        created_at,
+    })
 }
 
 #[tauri::command]
@@ -231,6 +302,84 @@ fn search_scriptures(
     Ok(results)
 }
 
+#[tauri::command]
+fn list_saved_passages(app: tauri::AppHandle) -> Result<Vec<SavedPassage>, String> {
+    let connection = open_user_data_connection(&app)?;
+    let mut statement = connection
+        .prepare(
+            "
+            select id, volume, book, chapter, verse, text, created_at
+            from saved_passages
+            order by created_at desc, id desc
+            ",
+        )
+        .map_err(|error| format!("Could not prepare saved passages query: {error}"))?;
+
+    let saved_passages = statement
+        .query_map([], row_to_saved_passage)
+        .map_err(|error| format!("Could not query saved passages: {error}"))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| format!("Could not read saved passages: {error}"))?;
+
+    Ok(saved_passages)
+}
+
+#[tauri::command]
+fn save_passage(
+    app: tauri::AppHandle,
+    book: String,
+    chapter: i64,
+    verse: i64,
+) -> Result<SavedPassage, String> {
+    let scriptures_connection = open_scriptures_connection(&app)?;
+    let (volume, text): (String, String) = scriptures_connection
+        .query_row(
+            "
+            select volume_title, scripture_text
+            from scriptures
+            where book_title = ?1 and chapter_number = ?2 and verse_number = ?3
+            limit 1
+            ",
+            (&book, chapter, verse),
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .map_err(|error| format!("Could not load passage to save: {error}"))?;
+
+    let connection = open_user_data_connection(&app)?;
+    connection
+        .execute(
+            "
+            insert into saved_passages (volume, book, chapter, verse, text)
+            values (?1, ?2, ?3, ?4, ?5)
+            on conflict(book, chapter, verse) do nothing
+            ",
+            params![volume, book, chapter, verse, text],
+        )
+        .map_err(|error| format!("Could not save passage: {error}"))?;
+
+    connection
+        .query_row(
+            "
+            select id, volume, book, chapter, verse, text, created_at
+            from saved_passages
+            where book = ?1 and chapter = ?2 and verse = ?3
+            ",
+            (&book, chapter, verse),
+            row_to_saved_passage,
+        )
+        .map_err(|error| format!("Could not read saved passage: {error}"))
+}
+
+#[tauri::command]
+fn remove_saved_passage(app: tauri::AppHandle, id: i64) -> Result<(), String> {
+    let connection = open_user_data_connection(&app)?;
+    connection
+        .execute("delete from saved_passages where id = ?1", [id])
+        .map_err(|error| format!("Could not remove saved passage: {error}"))?;
+
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -238,7 +387,10 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             list_books,
             get_chapter,
-            search_scriptures
+            search_scriptures,
+            list_saved_passages,
+            save_passage,
+            remove_saved_passage
         ])
         .run(tauri::generate_context!())
         .expect("error while running Tauri application");
