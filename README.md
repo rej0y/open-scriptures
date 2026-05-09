@@ -1,49 +1,42 @@
-# Open Scriptures
+# Project Title (Update)
 
-Open Scriptures is prepared as a desktop app using Tauri, SvelteKit, and
-TypeScript.
+Add a description of your project here.
 
-## Development
+## Instructions for Build and Use
 
-Enter the Nix shell first so Node, Rust, the Tauri CLI, and Linux native
-dependencies are available:
+Steps to build and/or run the software:
 
-```sh
-nix develop
-```
+1. First step here
+2.
+3.
 
-Install JavaScript dependencies:
+Instructions for using the software:
 
-```sh
-npm install
-```
+1. First step here
+2.
+3.
 
-Run the SvelteKit web app:
+## Development Environment
 
-```sh
-npm run dev
-```
+To recreate the development environment, you need the following software and/or libraries with the specified versions:
 
-Run the Tauri desktop app:
+* First thing here
+*
+*
 
-```sh
-npm run tauri dev
-```
+## Useful Websites to Learn More
 
-Check the TypeScript and Svelte sources:
+I found these websites useful in developing this software:
 
-```sh
-npm run check
-```
+* [Website Title](Link)
+*
+*
 
-Build the SvelteKit frontend:
+## Future Work
 
-```sh
-npm run build
-```
+The following items I plan to fix, improve, and/or add to this project in the future:
 
-## Project Layout
+* [ ] First thing here
+* [ ]
+* [ ]
 
-* `src/` contains the SvelteKit TypeScript frontend.
-* `src-tauri/` contains the Tauri Rust application shell.
-* `flake.nix` defines the local development environment.

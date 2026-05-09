@@ -31,13 +31,15 @@ The expected minimum amount of time each Sprint for each category is as follows:
 | Wed May  6 11:29:59 AM | Wed May  6 12:33:39 PM |    IM    | Set up Tauri, SvelteKit, TypeScript app shell.   | 1 hr 4 mins  |
 | Thu May  7 03:46:08 PM | Thu May  7 04:40:41 PM |    IM    | Built SQLite-backed scripture chapter reader.    |   55 mins    |
 | Thu May  7 04:40:41 PM | Thu May  7 05:40:34 PM |    IM    | Added scripture navigation and chapter picker.   |     1 hr     |
+| Thu May  7 06:43:07 PM | Thu May  7 08:17:23 PM |    IM    | Improved reader UI and tested Tauri dev flow.    | 1 hr 34 mins |
+| Fri May  8 10:26:39 PM |                        |    IM    |                                                  |              |
 
 
 ## Sprint Totals
 
 |Categroy                       |Total Time (Hours:Minutes)|
 |-------------------------------|:------------------------:|
-|IM - Individual Module         |          4:23            |
+|IM - Individual Module         |          5:57            |
 |TP - Team Project              |                          |
 |MTG - Class Meetings           |                          |
-|**TOTAL**                      |        **4:23**          |
+|**TOTAL**                      |        **5:57**          |
