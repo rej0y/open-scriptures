@@ -2,6 +2,7 @@ node_modules
 .svelte-kit
 build
 dist
+.test-dist
 src-tauri/target
 target
 *.log

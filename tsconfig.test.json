@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./.test-dist",
+    "noEmit": false,
+    "rootDir": "."
+  },
+  "include": [
+    "src/lib/**/*.ts",
+    "tests/**/*.ts"
+  ],
+  "exclude": [
+    "src/lib/**/*.svelte"
+  ]
+}

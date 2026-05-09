@@ -5,9 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
+    "dev:ensure": "bash -lc 'curl -sf http://127.0.0.1:1420/ >/dev/null || npm run dev'",
     "build": "vite build",
     "preview": "vite preview",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "test": "svelte-kit sync && npm run test:build && node --test --loader ./tests/node-test-loader.mjs .test-dist/tests/*.test.js && npm run test:browser",
+    "test:build": "tsc -p tsconfig.test.json",
+    "test:browser": "node --test ./tests/browser-ui.test.mjs",
     "tauri": "tauri"
   },
   "dependencies": {

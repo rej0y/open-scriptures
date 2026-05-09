@@ -33,13 +33,14 @@ The expected minimum amount of time each Sprint for each category is as follows:
 | Thu May  7 04:40:41 PM | Thu May  7 05:40:34 PM |    IM    | Added scripture navigation and chapter picker.   |     1 hr     |
 | Thu May  7 06:43:07 PM | Thu May  7 08:17:23 PM |    IM    | Improved reader UI and tested Tauri dev flow.    | 1 hr 34 mins |
 | Fri May  8 10:26:39 PM | Sat May  9 02:08:22 AM |    IM    | Added saved word highlights and sidebar view.    | 3 hrs 42 mins |
+| Sat May  9 02:27:34 PM | Sat May  9 04:04:28 PM |    IM    | Split app logic and added browser UI tests.      | 1 hr 37 mins |
 
 
 ## Sprint Totals
 
 |Categroy                       |Total Time (Hours:Minutes)|
 |-------------------------------|:------------------------:|
-|IM - Individual Module         |          9:39            |
+|IM - Individual Module         |         11:16            |
 |TP - Team Project              |                          |
 |MTG - Class Meetings           |                          |
-|**TOTAL**                      |        **9:39**          |
+|**TOTAL**                      |       **11:16**          |

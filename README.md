@@ -91,7 +91,7 @@ cargo check
 
 - [ ] Add note taking
 - [x] Add saved word highlights
-- [x] Add bookmarks and saved word selections
+- [ ] Add bookmarks and saved word selections
 - [ ] Add stronger search tools, including filters and phrase matching
 - [ ] Add cross-references and study links
 - [ ] Add user-owned local study data storage
