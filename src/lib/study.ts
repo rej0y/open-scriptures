@@ -72,6 +72,7 @@ export type ChapterNote = {
   y: number;
   width?: number;
   height?: number;
+  manualWidth?: boolean;
   text: string;
 };
 

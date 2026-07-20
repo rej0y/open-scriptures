@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, tick } from 'svelte';
+  import { onDestroy, onMount, tick } from 'svelte';
   import ChapterView from '$lib/ChapterView.svelte';
   import {
     type ChapterBookmark,
@@ -69,6 +69,8 @@
   let carouselViewport: HTMLElement;
   let carouselSettleTimer: number | undefined;
   let hasCenteredCarousel = false;
+  let noteSaveTimer: number | undefined;
+  const pendingNoteSaves = new Map<string, ChapterNote[]>();
 
   const readerState = createReaderStateAdapter({
     books: [() => books, (value) => (books = value)],
@@ -168,7 +170,24 @@
       return;
     }
 
-    localStorage.setItem(chapterNotesKey(chapter), JSON.stringify(chapterNotes));
+    pendingNoteSaves.set(chapterNotesKey(chapter), chapterNotes);
+    window.clearTimeout(noteSaveTimer);
+    noteSaveTimer = window.setTimeout(flushPendingChapterNotes, 150);
+  }
+
+  function flushPendingChapterNotes() {
+    if (typeof window !== 'undefined') {
+      window.clearTimeout(noteSaveTimer);
+    }
+    noteSaveTimer = undefined;
+    if (pendingNoteSaves.size === 0 || typeof localStorage === 'undefined') {
+      return;
+    }
+
+    for (const [key, notes] of pendingNoteSaves) {
+      localStorage.setItem(key, JSON.stringify(notes));
+    }
+    pendingNoteSaves.clear();
   }
 
   function createChapterNote(note: ChapterNote) {
@@ -176,12 +195,20 @@
     saveChapterNotes();
   }
 
-  function updateChapterNote(id: string, text: string) {
-    chapterNotes = chapterNotes.map((note) => (note.id === id ? { ...note, text } : note));
+  function updateChapterNote(
+    id: string,
+    text: string,
+    layout?: Pick<ChapterNote, 'x' | 'y' | 'width' | 'height' | 'manualWidth'>
+  ) {
+    chapterNotes = chapterNotes.map((note) =>
+      note.id === id ? { ...note, ...layout, text } : note);
     saveChapterNotes();
   }
 
-  function updateChapterNoteLayout(id: string, layout: Pick<ChapterNote, 'x' | 'y' | 'width' | 'height'>) {
+  function updateChapterNoteLayout(
+    id: string,
+    layout: Pick<ChapterNote, 'x' | 'y' | 'width' | 'height' | 'manualWidth'>
+  ) {
     chapterNotes = chapterNotes.map((note) => (note.id === id ? { ...note, ...layout } : note));
     saveChapterNotes();
   }
@@ -336,6 +363,8 @@
       isLoading = false;
     }
   });
+
+  onDestroy(flushPendingChapterNotes);
 </script>
 <svelte:head>
   <title>Open Scriptures</title>
@@ -352,6 +381,7 @@
   on:touchend={readerActions.saveCurrentSelectionSoon}
   on:scroll={updateSelectionOverlay}
   on:resize={updateSelectionOverlay}
+  on:pagehide={flushPendingChapterNotes}
 />
 
 <main

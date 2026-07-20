@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tick } from 'svelte';
+  import { onDestroy, tick } from 'svelte';
   import type {
     ChapterNote,
     ChapterVerse,
@@ -19,10 +19,18 @@
   export let highlightKey = (_word: SavedWord) => '';
   export let onRemoveHighlight = async (_word: SavedWord) => {};
   export let onCreateNote = (_note: ChapterNote) => {};
-  export let onUpdateNote = (_id: string, _text: string) => {};
+  type NoteLayout = Pick<ChapterNote, 'x' | 'y' | 'width' | 'height' | 'manualWidth'>;
+  type NoteRect = { left: number; top: number; width: number; height: number };
+  type NoteGeometry = {
+    chapterWidth: number;
+    textRects: NoteRect[];
+    noteRects: Map<string, NoteRect>;
+  };
+
+  export let onUpdateNote = (_id: string, _text: string, _layout?: NoteLayout) => {};
   export let onUpdateNoteLayout = (
     _id: string,
-    _layout: Pick<ChapterNote, 'x' | 'y' | 'width' | 'height'>
+    _layout: NoteLayout
   ) => {};
   export let onRemoveNotes = (_ids: string[]) => {};
   export let onPreviousChapter = () => {};
@@ -35,11 +43,19 @@
     | { startX: number; startY: number; left: number; top: number; width: number; height: number }
     | undefined;
   let noteInteraction:
-    | { id: string; mode: 'move' | 'left' | 'right' | 'top' | 'bottom'; startX: number; startY: number; note: ChapterNote }
+    | { id: string; mode: 'move' | 'left' | 'right'; startX: number; startY: number; note: ChapterNote }
     | undefined;
   let pendingNoteMove:
     | { startX: number; startY: number; note: ChapterNote }
     | undefined;
+  let noteInteractionGeometry: NoteGeometry | undefined;
+  let readerRectCache:
+    | { chapter: ScriptureChapter; chapterWidth: number; rects: NoteRect[] }
+    | undefined;
+  let textWidthMeasure: HTMLSpanElement | undefined;
+  let textHeightMeasure: HTMLTextAreaElement | undefined;
+  let textWidthMeasureSource: HTMLTextAreaElement | undefined;
+  let textHeightMeasureSource: HTMLTextAreaElement | undefined;
   const minimumNoteWidth = 16;
   const minimumNoteHeight = 28;
   const noteInset = 16;
@@ -52,7 +68,16 @@
   }
 
   function readerTextRects() {
-    return Array.from(
+    if (
+      chapter &&
+      readerRectCache?.chapter === chapter &&
+      readerRectCache.chapterWidth === chapterElement.clientWidth
+    ) {
+      return readerRectCache.rects;
+    }
+
+    const chapterBounds = chapterElement.getBoundingClientRect();
+    const rects = Array.from(
       chapterElement.querySelectorAll<HTMLElement>('.chapter-header, .verse-text, .chapter-footer')
     ).flatMap((element) => {
       const textNodes: Text[] = [];
@@ -69,87 +94,115 @@
       return textNodes.flatMap((textNode) => {
         const range = document.createRange();
         range.selectNodeContents(textNode);
-        return Array.from(range.getClientRects());
+        return Array.from(range.getClientRects()).map((bounds) => ({
+          left: bounds.left - chapterBounds.left,
+          top: bounds.top - chapterBounds.top,
+          width: bounds.width,
+          height: bounds.height
+        }));
       });
     });
+
+    if (chapter) {
+      readerRectCache = { chapter, chapterWidth: chapterElement.clientWidth, rects };
+    }
+    return rects;
   }
 
   function pointIsOverReaderText(clientX: number, clientY: number) {
+    const chapterBounds = chapterElement.getBoundingClientRect();
+    const x = clientX - chapterBounds.left;
+    const y = clientY - chapterBounds.top;
     return readerTextRects().some(
       (bounds) =>
-        clientX >= bounds.left &&
-        clientX <= bounds.left + bounds.width &&
-        clientY >= bounds.top &&
-        clientY <= bounds.top + bounds.height
+        x >= bounds.left &&
+        x <= bounds.left + bounds.width &&
+        y >= bounds.top &&
+        y <= bounds.top + bounds.height
     );
   }
 
-  function noteOverlapsReaderText(x: number, y: number, width: number, height: number) {
+  function noteGeometry(): NoteGeometry {
     const chapterBounds = chapterElement.getBoundingClientRect();
-    const textRects = readerTextRects();
+    const noteRects = new Map<string, NoteRect>();
 
-    return textRects.some((bounds) => {
-      const textLeft = bounds.left - chapterBounds.left;
-      const textTop = bounds.top - chapterBounds.top;
+    for (const note of notes) {
+      const bounds = noteElements[note.id]?.getBoundingClientRect();
+      if (bounds) {
+        noteRects.set(note.id, {
+          left: bounds.left - chapterBounds.left,
+          top: bounds.top - chapterBounds.top,
+          width: bounds.width,
+          height: bounds.height
+        });
+      }
+    }
 
+    return {
+      chapterWidth: chapterElement.clientWidth,
+      textRects: readerTextRects(),
+      noteRects
+    };
+  }
+
+  function noteOverlapsReaderText(
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    geometry: NoteGeometry
+  ) {
+    return geometry.textRects.some((bounds) => {
       return (
-        x < textLeft + bounds.width &&
-        x + width > textLeft &&
-        y < textTop + bounds.height &&
-        y + height > textTop
+        x < bounds.left + bounds.width &&
+        x + width > bounds.left &&
+        y < bounds.top + bounds.height &&
+        y + height > bounds.top
       );
     });
   }
 
-  function noteOverlapsAnotherNote(id: string, x: number, y: number, width: number, height: number) {
-    const chapterBounds = chapterElement.getBoundingClientRect();
-    return notes.some((note) => {
-      if (note.id === id) return false;
-      const bounds = noteElements[note.id]?.getBoundingClientRect();
-      if (!bounds) return false;
-      const otherX = bounds.left - chapterBounds.left;
-      const otherY = bounds.top - chapterBounds.top;
-      return x < otherX + bounds.width && x + width > otherX && y < otherY + bounds.height && y + height > otherY;
-    });
-  }
-
-  function noteTextFits(id: string, width: number, height: number) {
-    const textarea = noteInputs[id];
-    if (!textarea) return true;
-    return measuredTextHeight(textarea, textarea.value, width) <= height;
-  }
-
-  function minimumWidthForNoteText(id: string, height: number, maximumWidth: number) {
-    const textarea = noteInputs[id];
-    if (!textarea || !textarea.value) return minimumNoteWidth;
-    if (!noteTextFits(id, maximumWidth, height)) return undefined;
-    if (noteTextFits(id, minimumNoteWidth, height)) return minimumNoteWidth;
-
-    let lower = minimumNoteWidth;
-    let upper = maximumWidth;
-    while (upper - lower > 1) {
-      const middle = (lower + upper) / 2;
-      if (noteTextFits(id, middle, height)) {
-        upper = middle;
-      } else {
-        lower = middle;
+  function noteOverlapsAnotherNote(
+    id: string,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    geometry: NoteGeometry
+  ) {
+    for (const [noteId, bounds] of geometry.noteRects) {
+      if (
+        noteId !== id &&
+        x < bounds.left + bounds.width &&
+        x + width > bounds.left &&
+        y < bounds.top + bounds.height &&
+        y + height > bounds.top
+      ) {
+        return true;
       }
     }
-    return upper;
+    return false;
   }
 
-  function noteFits(id: string, x: number, y: number, width: number, height: number, checkText = false) {
+  function noteFits(
+    id: string,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    geometry = noteGeometry()
+  ) {
     return (
       x >= noteInset &&
       y >= noteInset &&
-      x + width <= chapterElement.clientWidth - noteInset &&
-      !noteOverlapsReaderText(x, y, width, height) &&
-      !noteOverlapsAnotherNote(id, x, y, width, height) &&
-      (!checkText || noteTextFits(id, width, height))
+      x + width <= geometry.chapterWidth - noteInset &&
+      !noteOverlapsReaderText(x, y, width, height, geometry) &&
+      !noteOverlapsAnotherNote(id, x, y, width, height, geometry)
     );
   }
 
   function limitAxis(start: number, target: number, isValid: (value: number) => boolean) {
+    if (isValid(target)) return target;
     const step = target >= start ? 2 : -2;
     let value = start;
     while ((step > 0 && value + step <= target) || (step < 0 && value + step >= target)) {
@@ -157,28 +210,18 @@
       if (!isValid(next)) break;
       value = next;
     }
-    return isValid(target) ? target : value;
-  }
-
-  function closestValidAxis(start: number, target: number, isValid: (value: number) => boolean) {
-    if (isValid(target)) return target;
-    const step = target >= start ? -2 : 2;
-    let value = target + step;
-    while ((step < 0 && value > start) || (step > 0 && value < start)) {
-      if (isValid(value)) return value;
-      value += step;
-    }
-    return start;
+    return value;
   }
 
   function startNoteInteraction(
     event: PointerEvent,
     note: ChapterNote,
-    mode: 'move' | 'left' | 'right' | 'top' | 'bottom'
+    mode: 'move' | 'left' | 'right'
   ) {
     event.preventDefault();
     event.stopPropagation();
     noteInteraction = { id: note.id, mode, startX: event.clientX, startY: event.clientY, note: { ...note } };
+    noteInteractionGeometry = noteGeometry();
     chapterElement.setPointerCapture(event.pointerId);
   }
 
@@ -203,6 +246,7 @@
           startY: pendingNoteMove.startY,
           note: pendingNoteMove.note
         };
+        noteInteractionGeometry = noteGeometry();
         pendingNoteMove = undefined;
       }
     }
@@ -213,12 +257,13 @@
     if (!noteInteraction) return;
     if (event.buttons === 0) {
       noteInteraction = undefined;
+      noteInteractionGeometry = undefined;
       return;
     }
     const { note, mode } = noteInteraction;
+    const geometry = noteInteractionGeometry ?? noteGeometry();
     const width = note.width ?? minimumNoteWidth;
     const height = note.height ?? minimumNoteHeight;
-    const linkedSize = width + height;
     const dx = event.clientX - noteInteraction.startX;
     const dy = event.clientY - noteInteraction.startY;
     let x = note.x;
@@ -226,99 +271,57 @@
     let nextWidth = width;
     let nextHeight = height;
 
-    const heightForWidth = (candidateWidth: number) =>
+    const textHeightForWidth = (candidateWidth: number) =>
       Math.max(
         minimumNoteHeight,
-        linkedSize - candidateWidth,
         noteInputs[note.id]
           ? measuredTextHeight(noteInputs[note.id], noteInputs[note.id].value, candidateWidth)
           : minimumNoteHeight
       );
-
-    const widthForHeight = (candidateHeight: number, candidateY: number) => {
-      const centerX = note.x + width / 2;
-      const maximumWidth = Math.max(
-        minimumNoteWidth,
-        2 * Math.min(centerX - noteInset, chapterElement.clientWidth - noteInset - centerX)
-      );
-      const requiredWidth = minimumWidthForNoteText(note.id, candidateHeight, maximumWidth);
-      if (requiredWidth === undefined) return undefined;
-      const desiredWidth = Math.min(
-        maximumWidth,
-        Math.max(minimumNoteWidth, linkedSize - candidateHeight, requiredWidth)
-      );
-      const fitsAtWidth = (candidateWidth: number) => {
-        const candidateX = centerX - candidateWidth / 2;
-        return noteFits(note.id, candidateX, candidateY, candidateWidth, candidateHeight);
-      };
-
-      if (fitsAtWidth(desiredWidth)) {
-        return { width: desiredWidth, x: centerX - desiredWidth / 2 };
-      }
-      if (!fitsAtWidth(requiredWidth)) return undefined;
-
-      let lower = requiredWidth;
-      let upper = desiredWidth;
-      while (upper - lower > 1) {
-        const middle = (lower + upper) / 2;
-        if (fitsAtWidth(middle)) {
-          lower = middle;
-        } else {
-          upper = middle;
-        }
-      }
-      return { width: lower, x: centerX - lower / 2 };
-    };
+    const naturalWidth = noteInputs[note.id]
+      ? Math.max(minimumNoteWidth, measuredTextWidth(noteInputs[note.id], noteInputs[note.id].value))
+      : width;
 
     if (mode === 'move') {
       const targetX = note.x + dx;
       const targetY = note.y + dy;
-      x = limitAxis(note.x, targetX, (candidate) => noteFits(note.id, candidate, note.y, width, height));
-      y = limitAxis(note.y, targetY, (candidate) => noteFits(note.id, x, candidate, width, height));
-      x = limitAxis(note.x, targetX, (candidate) => noteFits(note.id, candidate, y, width, height));
-      y = limitAxis(note.y, targetY, (candidate) => noteFits(note.id, x, candidate, width, height));
+      x = limitAxis(note.x, targetX, (candidate) =>
+        noteFits(note.id, candidate, note.y, width, height, geometry));
+      y = limitAxis(note.y, targetY, (candidate) =>
+        noteFits(note.id, x, candidate, width, height, geometry));
+      x = limitAxis(note.x, targetX, (candidate) =>
+        noteFits(note.id, candidate, y, width, height, geometry));
+      y = limitAxis(note.y, targetY, (candidate) =>
+        noteFits(note.id, x, candidate, width, height, geometry));
     } else if (mode === 'left') {
-      const targetWidth = Math.max(minimumNoteWidth, width - dx);
+      const targetWidth = Math.min(naturalWidth, Math.max(minimumNoteWidth, width - dx));
       nextWidth = limitAxis(width, targetWidth, (candidate) => {
-        const candidateHeight = heightForWidth(candidate);
+        const candidateHeight = textHeightForWidth(candidate);
         const candidateX = note.x + width - candidate;
-        return noteFits(note.id, candidateX, note.y, candidate, candidateHeight);
+        return noteFits(note.id, candidateX, note.y, candidate, candidateHeight, geometry);
       });
       x = note.x + width - nextWidth;
-      nextHeight = heightForWidth(nextWidth);
-    } else if (mode === 'right') {
-      const targetWidth = Math.max(minimumNoteWidth, width + dx);
-      nextWidth = limitAxis(width, targetWidth, (candidate) => {
-        const candidateHeight = heightForWidth(candidate);
-        return noteFits(note.id, note.x, note.y, candidate, candidateHeight);
-      });
-      nextHeight = heightForWidth(nextWidth);
-    } else if (mode === 'top') {
-      const targetHeight = Math.max(minimumNoteHeight, height - dy);
-      nextHeight = closestValidAxis(height, targetHeight, (candidate) => {
-        const candidateY = note.y + height - candidate;
-        return widthForHeight(candidate, candidateY) !== undefined;
-      });
-      y = note.y + height - nextHeight;
-      const layout = widthForHeight(nextHeight, y);
-      nextWidth = layout?.width ?? width;
-      x = layout?.x ?? note.x;
+      nextHeight = textHeightForWidth(nextWidth);
     } else {
-      const targetHeight = Math.max(minimumNoteHeight, height + dy);
-      nextHeight = closestValidAxis(
-        height,
-        targetHeight,
-        (candidate) => widthForHeight(candidate, note.y) !== undefined
-      );
-      const layout = widthForHeight(nextHeight, note.y);
-      nextWidth = layout?.width ?? width;
-      x = layout?.x ?? note.x;
+      const targetWidth = Math.min(naturalWidth, Math.max(minimumNoteWidth, width + dx));
+      nextWidth = limitAxis(width, targetWidth, (candidate) => {
+        const candidateHeight = textHeightForWidth(candidate);
+        return noteFits(note.id, note.x, note.y, candidate, candidateHeight, geometry);
+      });
+      nextHeight = textHeightForWidth(nextWidth);
     }
 
-    onUpdateNoteLayout(note.id, { x, y, width: nextWidth, height: nextHeight });
+    onUpdateNoteLayout(note.id, {
+      x,
+      y,
+      width: nextWidth,
+      height: nextHeight,
+      manualWidth: mode === 'move' ? note.manualWidth : true
+    });
   }
 
   function notePositionFor(x: number, y: number) {
+    const geometry = noteGeometry();
     const noteSizes = [[minimumNoteWidth, minimumNoteHeight]];
     const requested = clampNotePosition(x, y, minimumNoteWidth);
     const belowChapter = clampNotePosition(noteInset, chapterElement.scrollHeight + noteInset, minimumNoteWidth);
@@ -346,7 +349,7 @@
     for (const candidate of candidates) {
       for (const [width, height] of noteSizes) {
         const position = clampNotePosition(candidate.x, candidate.y, width);
-        if (noteFits('', position.x, position.y, width, height)) {
+        if (noteFits('', position.x, position.y, width, height, geometry)) {
           return { ...position, width, height };
         }
       }
@@ -449,6 +452,7 @@
   function handlePointerUp(event: PointerEvent) {
     if (noteInteraction) {
       noteInteraction = undefined;
+      noteInteractionGeometry = undefined;
       return;
     }
     finishNoteSelection(event);
@@ -457,6 +461,12 @@
   function finishMouseInteraction() {
     pendingNoteMove = undefined;
     noteInteraction = undefined;
+    noteInteractionGeometry = undefined;
+  }
+
+  function cancelNoteInteractions() {
+    noteSelection = undefined;
+    finishMouseInteraction();
   }
 
   async function createNoteAt(event: MouseEvent) {
@@ -490,37 +500,95 @@
   }
 
   function measuredTextWidth(textarea: HTMLTextAreaElement, text: string) {
-    const measure = document.createElement('span');
-    measure.style.cssText = `position: fixed; visibility: hidden; white-space: pre; font: ${getComputedStyle(textarea).font};`;
-    measure.textContent = (text.split('\n').sort((a, b) => b.length - a.length)[0] || ' ');
-    document.body.append(measure);
-    const width = Math.ceil(measure.getBoundingClientRect().width + 4);
-    measure.remove();
-    return width;
+    if (!textWidthMeasure) {
+      textWidthMeasure = document.createElement('span');
+      textWidthMeasure.setAttribute('aria-hidden', 'true');
+      document.body.append(textWidthMeasure);
+    }
+
+    if (textWidthMeasureSource !== textarea) {
+      const computed = getComputedStyle(textarea);
+      textWidthMeasure.style.cssText = `position: fixed; left: -10000px; top: 0; visibility: hidden; pointer-events: none; white-space: pre; font: ${computed.font}; letter-spacing: ${computed.letterSpacing};`;
+      textWidthMeasureSource = textarea;
+    }
+    textWidthMeasure.textContent = text.split('\n').sort((a, b) => b.length - a.length)[0] || ' ';
+    return Math.ceil(textWidthMeasure.getBoundingClientRect().width + 4);
   }
 
   function measuredTextHeight(textarea: HTMLTextAreaElement, text: string, width: number) {
-    const measure = textarea.cloneNode() as HTMLTextAreaElement;
-    measure.value = text;
-    const computed = getComputedStyle(textarea);
-    measure.style.cssText = `position: fixed; visibility: hidden; box-sizing: border-box; overflow: hidden; resize: none; width: ${width}px; height: ${minimumNoteHeight}px; padding: 0; border: 0; font: ${computed.font}; line-height: ${computed.lineHeight}; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word;`;
-    document.body.append(measure);
-    const height = Math.max(minimumNoteHeight, measure.scrollHeight);
-    measure.remove();
-    return height;
+    if (!textHeightMeasure) {
+      textHeightMeasure = document.createElement('textarea');
+      textHeightMeasure.setAttribute('aria-hidden', 'true');
+      textHeightMeasure.tabIndex = -1;
+      document.body.append(textHeightMeasure);
+    }
+
+    if (textHeightMeasureSource !== textarea) {
+      const computed = getComputedStyle(textarea);
+      textHeightMeasure.style.cssText = `position: fixed; left: -10000px; top: 0; visibility: hidden; pointer-events: none; box-sizing: border-box; overflow: hidden; resize: none; height: ${minimumNoteHeight}px; padding: 0; border: 0; font: ${computed.font}; line-height: ${computed.lineHeight}; letter-spacing: ${computed.letterSpacing}; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word;`;
+      textHeightMeasureSource = textarea;
+    }
+    textHeightMeasure.style.width = `${width}px`;
+    textHeightMeasure.value = text;
+    return Math.max(minimumNoteHeight, textHeightMeasure.scrollHeight);
+  }
+
+  function fitNoteOnMount(textarea: HTMLTextAreaElement, note: ChapterNote) {
+    let isMounted = true;
+    void tick().then(() => {
+      if (!isMounted || !note.text) return;
+      const layout = layoutForNoteText(note, textarea, note.text);
+      if (
+        layout &&
+        (Math.abs((note.width ?? minimumNoteWidth) - layout.width) >= 1 ||
+          Math.abs((note.height ?? minimumNoteHeight) - layout.height) >= 1)
+      ) {
+        onUpdateNoteLayout(note.id, layout);
+      }
+    });
+
+    return {
+      destroy() {
+        isMounted = false;
+      }
+    };
   }
 
   function layoutForNoteText(note: ChapterNote, textarea: HTMLTextAreaElement, text: string) {
-    const maximumWidth = Math.max(minimumNoteWidth, chapterElement.clientWidth - note.x - noteInset);
-    const desiredWidth = Math.min(maximumWidth, Math.max(minimumNoteWidth, measuredTextWidth(textarea, text)));
-
-    for (let width = desiredWidth; width >= minimumNoteWidth; width -= 2) {
+    const geometry = noteGeometry();
+    const maximumWidth = Math.max(minimumNoteWidth, geometry.chapterWidth - note.x - noteInset);
+    const naturalWidth = Math.min(
+      maximumWidth,
+      Math.max(minimumNoteWidth, measuredTextWidth(textarea, text))
+    );
+    const desiredWidth = note.manualWidth
+      ? Math.min(naturalWidth, Math.max(minimumNoteWidth, note.width ?? naturalWidth))
+      : naturalWidth;
+    const layoutAtWidth = (width: number) => {
       const height = measuredTextHeight(textarea, text, width);
-      if (noteFits(note.id, note.x, note.y, width, height)) {
-        return { x: note.x, y: note.y, width, height };
+      return noteFits(note.id, note.x, note.y, width, height, geometry)
+        ? { x: note.x, y: note.y, width, height }
+        : undefined;
+    };
+
+    const desiredLayout = layoutAtWidth(desiredWidth);
+    if (desiredLayout) return desiredLayout;
+
+    // Search in small groups instead of forcing a full document layout at
+    // every two-pixel width. Refine the first usable group for a close fit.
+    const widthStep = 8;
+    for (let width = desiredWidth - widthStep; width > minimumNoteWidth; width -= widthStep) {
+      const layout = layoutAtWidth(width);
+      if (!layout) continue;
+
+      for (let refinedWidth = Math.min(desiredWidth - 2, width + widthStep - 2); refinedWidth > width; refinedWidth -= 2) {
+        const refinedLayout = layoutAtWidth(refinedWidth);
+        if (refinedLayout) return refinedLayout;
       }
+      return layout;
     }
-    return undefined;
+
+    return layoutAtWidth(minimumNoteWidth);
   }
 
   async function updateNoteText(note: ChapterNote, textarea: HTMLTextAreaElement) {
@@ -531,19 +599,24 @@
       return;
     }
 
-    onUpdateNoteLayout(note.id, layout);
-    onUpdateNote(note.id, text);
+    onUpdateNote(note.id, text, layout);
     await tick();
     const updatedTextarea = noteInputs[note.id];
     if (updatedTextarea && (updatedTextarea.scrollHeight > updatedTextarea.clientHeight || updatedTextarea.scrollWidth > updatedTextarea.clientWidth)) {
-      const previousLayout = layoutForNoteText(note, updatedTextarea, note.text);
       updatedTextarea.value = note.text;
-      if (previousLayout) {
-        onUpdateNoteLayout(note.id, previousLayout);
-      }
-      onUpdateNote(note.id, note.text);
+      onUpdateNote(note.id, note.text, {
+        x: note.x,
+        y: note.y,
+        width: note.width ?? minimumNoteWidth,
+        height: note.height ?? minimumNoteHeight
+      });
     }
   }
+
+  onDestroy(() => {
+    textWidthMeasure?.remove();
+    textHeightMeasure?.remove();
+  });
 </script>
 
 <svelte:window
@@ -562,7 +635,7 @@
   on:pointerdown={startNoteSelection}
   on:pointermove={handlePointerMove}
   on:pointerup={handlePointerUp}
-  on:pointercancel={() => { noteSelection = undefined; noteInteraction = undefined; }}
+  on:pointercancel={cancelNoteInteractions}
 >
   {#if isLoading && !chapter}
     <p class="status">Loading chapter...</p>
@@ -649,10 +722,9 @@
       >
         <button class="note-handle note-handle-left" type="button" aria-label="Resize note from left" on:pointerdown={(event) => startNoteInteraction(event, note, 'left')}></button>
         <button class="note-handle note-handle-right" type="button" aria-label="Resize note from right" on:pointerdown={(event) => startNoteInteraction(event, note, 'right')}></button>
-        <button class="note-handle note-handle-top" type="button" aria-label="Resize note from top" on:pointerdown={(event) => startNoteInteraction(event, note, 'top')}></button>
-        <button class="note-handle note-handle-bottom" type="button" aria-label="Resize note from bottom" on:pointerdown={(event) => startNoteInteraction(event, note, 'bottom')}></button>
         <textarea
           bind:this={noteInputs[note.id]}
+          use:fitNoteOnMount={note}
           aria-label="Chapter note"
           value={note.text}
           on:wheel|preventDefault
@@ -868,10 +940,6 @@
   .note-handle-right { top: 0; width: 4px; height: 100%; }
   .note-handle-left { left: -5px; cursor: ew-resize; }
   .note-handle-right { right: -5px; cursor: ew-resize; }
-  .note-handle-top,
-  .note-handle-bottom { left: 0; width: 100%; height: 4px; }
-  .note-handle-top { top: -5px; cursor: ns-resize; }
-  .note-handle-bottom { bottom: -5px; cursor: ns-resize; }
 
   .chapter-note textarea {
     display: block;
@@ -888,9 +956,13 @@
     caret-color: #0b5e55;
     cursor: text;
     box-shadow: none;
-    font: inherit;
+    font-family:
+      "Liberation Serif", Georgia, "Times New Roman", serif;
+    font-size: 1rem;
     font-style: italic;
-    line-height: 1.45;
+    font-weight: 400;
+    line-height: 1.4;
+    letter-spacing: 0.01em;
     overflow-wrap: anywhere;
     white-space: pre-wrap;
     word-break: break-word;

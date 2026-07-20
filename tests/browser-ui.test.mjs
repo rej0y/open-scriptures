@@ -648,7 +648,7 @@ test('note moves when the second click is held and dragged', async (t) => {
   assert.notEqual(after.left, start.before.left, JSON.stringify({ start, after }));
 });
 
-test('note bottom edge reaches the dragged height without clipping text', async (t) => {
+test('narrowing a note wraps text and fits the resulting height', async (t) => {
   const harness = await createHarness();
   t.after(async () => {
     await harness.close();
@@ -672,7 +672,7 @@ test('note bottom edge reaches the dragged height without clipping text', async 
       textarea.focus();
       const note = document.querySelector('.chapter-note');
       const noteBounds = note.getBoundingClientRect();
-      const handleBounds = document.querySelector('.note-handle-bottom').getBoundingClientRect();
+      const handleBounds = document.querySelector('.note-handle-right').getBoundingClientRect();
       return {
         x: handleBounds.left + handleBounds.width / 2,
         y: handleBounds.top + handleBounds.height / 2,
@@ -685,7 +685,7 @@ test('note bottom edge reaches the dragged height without clipping text', async 
     harness.client,
     `(() => {
       const chapter = document.querySelector('.chapter-view');
-      const handle = document.querySelector('.note-handle-bottom');
+      const handle = document.querySelector('.note-handle-right');
       chapter.setPointerCapture = () => {};
       handle.dispatchEvent(new PointerEvent('pointerdown', {
         bubbles: true,
@@ -702,8 +702,8 @@ test('note bottom edge reaches the dragged height without clipping text', async 
         isPrimary: true,
         button: 0,
         buttons: 1,
-        clientX: ${start.x},
-        clientY: ${start.y + 120}
+        clientX: ${start.x - 120},
+        clientY: ${start.y}
       }));
       chapter.dispatchEvent(new PointerEvent('pointerup', {
         bubbles: true,
@@ -711,8 +711,8 @@ test('note bottom edge reaches the dragged height without clipping text', async 
         isPrimary: true,
         button: 0,
         buttons: 0,
-        clientX: ${start.x},
-        clientY: ${start.y + 120}
+        clientX: ${start.x - 120},
+        clientY: ${start.y}
       }));
     })()`
   );
@@ -732,7 +732,151 @@ test('note bottom edge reaches the dragged height without clipping text', async 
     })()`
   );
 
-  assert(after.height >= start.before.height + 110, JSON.stringify({ start, after }));
-  assert(after.width < start.before.width, JSON.stringify({ start, after }));
+  assert(after.width <= start.before.width - 110, JSON.stringify({ start, after }));
+  assert(after.height > start.before.height, JSON.stringify({ start, after }));
   assert(after.scrollHeight <= after.clientHeight, JSON.stringify(after));
+});
+
+test('note cannot grow wider than its text', async (t) => {
+  const harness = await createHarness();
+  t.after(async () => {
+    await harness.close();
+  });
+
+  const start = await evaluate(
+    harness.client,
+    `(async () => {
+      const chapter = document.querySelector('.chapter-view');
+      const chapterBounds = chapter.getBoundingClientRect();
+      chapter.dispatchEvent(new MouseEvent('dblclick', {
+        bubbles: true,
+        clientX: chapterBounds.left + 40,
+        clientY: chapterBounds.top + chapter.scrollHeight + 80
+      }));
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      const textarea = document.querySelector('.chapter-note textarea');
+      textarea.value = 'wide';
+      textarea.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText' }));
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      textarea.focus();
+      const noteBounds = document.querySelector('.chapter-note').getBoundingClientRect();
+      const handleBounds = document.querySelector('.note-handle-right').getBoundingClientRect();
+      return {
+        x: handleBounds.left + handleBounds.width / 2,
+        y: handleBounds.top + handleBounds.height / 2,
+        before: { width: noteBounds.width, height: noteBounds.height }
+      };
+    })()`
+  );
+
+  await evaluate(
+    harness.client,
+    `(() => {
+      const chapter = document.querySelector('.chapter-view');
+      const handle = document.querySelector('.note-handle-right');
+      chapter.setPointerCapture = () => {};
+      handle.dispatchEvent(new PointerEvent('pointerdown', {
+        bubbles: true,
+        pointerId: 1,
+        isPrimary: true,
+        button: 0,
+        buttons: 1,
+        clientX: ${start.x},
+        clientY: ${start.y}
+      }));
+      chapter.dispatchEvent(new PointerEvent('pointermove', {
+        bubbles: true,
+        pointerId: 1,
+        isPrimary: true,
+        button: 0,
+        buttons: 1,
+        clientX: ${start.x + 100},
+        clientY: ${start.y}
+      }));
+      chapter.dispatchEvent(new PointerEvent('pointerup', {
+        bubbles: true,
+        pointerId: 1,
+        isPrimary: true,
+        button: 0,
+        buttons: 0,
+        clientX: ${start.x + 100},
+        clientY: ${start.y}
+      }));
+    })()`
+  );
+  await delay(30);
+
+  const after = await evaluate(
+    harness.client,
+    `(() => {
+      const note = document.querySelector('.chapter-note').getBoundingClientRect();
+      const noteFont = getComputedStyle(document.querySelector('.chapter-note textarea'));
+      return {
+        width: note.width,
+        height: note.height,
+        fontFamily: noteFont.fontFamily,
+        fontStyle: noteFont.fontStyle
+      };
+    })()`
+  );
+
+  assert(Math.abs(after.width - start.before.width) < 1, JSON.stringify({ start, after }));
+  assert(Math.abs(after.height - start.before.height) < 1, JSON.stringify({ start, after }));
+  assert.match(after.fontFamily, /Liberation Serif/);
+  assert.equal(after.fontStyle, 'italic');
+});
+
+test('rapid note edits are persisted in one batch', async (t) => {
+  const harness = await createHarness();
+  t.after(async () => {
+    await harness.close();
+  });
+
+  await waitFor(harness.client, async () => (await getText(harness.client, 'h1')) === '1 Nephi 1');
+  const result = await evaluate(
+    harness.client,
+    `(async () => {
+      const chapter = document.querySelector('.chapter-slide:nth-child(2) .chapter-view');
+      const bounds = chapter.getBoundingClientRect();
+      chapter.dispatchEvent(new MouseEvent('dblclick', {
+        bubbles: true,
+        clientX: bounds.left + 40,
+        clientY: bounds.top + chapter.scrollHeight + 80
+      }));
+      await new Promise((resolve) => setTimeout(resolve, 200));
+
+      const storageKey = 'open-scriptures:notes:1 Nephi:1';
+      const originalSetItem = Storage.prototype.setItem;
+      let writes = 0;
+      Storage.prototype.setItem = function (key, value) {
+        if (key === storageKey) writes += 1;
+        return originalSetItem.call(this, key, value);
+      };
+
+      const textarea = document.querySelector('.chapter-note textarea');
+      for (const text of ['f', 'fa', 'fast', 'fast note']) {
+        textarea.value = text;
+        textarea.dispatchEvent(new InputEvent('input', {
+          bubbles: true,
+          inputType: 'insertText',
+          data: text
+        }));
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+
+      const immediateWrites = writes;
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      const savedNotes = JSON.parse(localStorage.getItem(storageKey) ?? '[]');
+      Storage.prototype.setItem = originalSetItem;
+      return {
+        immediateWrites,
+        settledWrites: writes,
+        savedText: savedNotes[0]?.text ?? ''
+      };
+    })()`
+  );
+
+  assert.equal(result.immediateWrites, 0);
+  assert.equal(result.settledWrites, 1);
+  assert.equal(result.savedText, 'fast note');
 });

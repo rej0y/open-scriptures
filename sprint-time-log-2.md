@@ -27,13 +27,15 @@ The expected minimum amount of time each Sprint for each category is as follows:
 
 | Start Time | End Time | Category | Description | Total Time |
 |------------|----------|:--------:|-------------|:----------:|
-| Sun Jul 19 06:19:39 PM | — | — | Sprint work in progress. | — |
+| Sun Jul 19 06:19:39 PM | Sun Jul 19 06:50:49 PM | IM | Improved WebKit scrolling performance and set up the Sprint 2 log. | 31 mins |
+| Sun Jul 19 06:50:49 PM | Mon Jul 20 01:15:23 AM | IM | Added interactive chapter notes, note navigation, and browser UI tests. | 6 hrs 25 mins |
+| Mon Jul 20 12:12:27 PM | Mon Jul 20 03:10:52 PM | IM | Optimized chapter notes, fixed content-aware resizing, and refined note typography. | 2 hrs 58 mins |
 
 ## Sprint Totals
 
 | Category | Total Time (Hours:Minutes) |
 |----------|:--------------------------:|
-| IM - Individual Module | 0:00 |
+| IM - Individual Module | 9:54 |
 | TP - Team Project | 0:00 |
 | MTG - Class Meetings | 0:00 |
-| **TOTAL** | **0:00** |
+| **TOTAL** | **9:54** |
