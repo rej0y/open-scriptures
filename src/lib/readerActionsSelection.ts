@@ -5,6 +5,8 @@ export function createReaderSelectionActions(
   deps: ReaderActionDeps,
   refreshSavedWords: () => Promise<void>
 ) {
+  let pendingSelectionSave: ReturnType<typeof setTimeout> | undefined;
+
   async function saveCurrentSelection() {
     const chapter = state.getChapter();
     if (!chapter || state.getIsSavingSelection()) return;
@@ -44,12 +46,31 @@ export function createReaderSelectionActions(
 
   function saveCurrentSelectionSoon() {
     updatePendingSelection();
-    setTimeout(saveCurrentSelection, 60);
+
+    if (pendingSelectionSave) {
+      clearTimeout(pendingSelectionSave);
+    }
+
+    pendingSelectionSave = setTimeout(() => {
+      pendingSelectionSave = undefined;
+      void saveCurrentSelection();
+    }, 60);
+  }
+
+  function cancelPendingSelectionSave() {
+    if (pendingSelectionSave) {
+      clearTimeout(pendingSelectionSave);
+      pendingSelectionSave = undefined;
+    }
+
+    state.setPendingSelectionParts([]);
+    deps.getSelection()?.removeAllRanges();
   }
 
   return {
     saveCurrentSelection,
     updatePendingSelection,
-    saveCurrentSelectionSoon
+    saveCurrentSelectionSoon,
+    cancelPendingSelectionSave
   };
 }

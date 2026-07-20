@@ -1,10 +1,9 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import ChapterView from '$lib/ChapterView.svelte';
-  import HighlightsDrawer from '$lib/HighlightsDrawer.svelte';
-  import ReaderSidebar from '$lib/ReaderSidebar.svelte';
   import {
     type ChapterBookmark,
+    type ChapterNote,
     highlightId,
     highlightKey,
     type SavedHighlight,
@@ -34,7 +33,6 @@
   import { createReaderActions } from '$lib/readerActions';
   import { deriveReaderViewState, verseSegmentsForChapter } from '$lib/readerView';
   import { cloneVisibleChapter } from '$lib/readerPage';
-  import { shouldCloseHighlightsDrawer } from '$lib/readerDrawer';
   import { createReaderStateAdapter } from '$lib/readerStateAdapter';
   import { invoke } from '$lib/tauriBridge';
 
@@ -53,7 +51,6 @@
   let searchResults: ScriptureSearchResult[] = [];
   let hasSearched = false;
   let pendingSelectionParts: SelectionPart[] = [];
-  let isHighlightsDrawerOpen = false;
   let bookmarks: ChapterBookmark[] = [];
   let bookmarkTitle = '';
   let bookmarkError = '';
@@ -63,6 +60,15 @@
   let savedWords: SavedWord[] = [];
   let savedHighlights: SavedHighlight[] = [];
   let savedWordsError = '';
+  let selectionOverlayRects: DOMRect[] = [];
+  let chapterNotes: ChapterNote[] = [];
+  let previousChapterPreview: ScriptureChapter | null = null;
+  let nextChapterPreview: ScriptureChapter | null = null;
+  let chapterPreviewRequest = 0;
+  let isCarouselRecentering = false;
+  let carouselViewport: HTMLElement;
+  let carouselSettleTimer: number | undefined;
+  let hasCenteredCarousel = false;
 
   const readerState = createReaderStateAdapter({
     books: [() => books, (value) => (books = value)],
@@ -125,22 +131,201 @@
     chapterOptions
   } = deriveReaderViewState(books, pendingBook, chapter, savedWords));
 
+  $: if (chapter) {
+    void loadChapterPreviews(chapter);
+    chapterNotes = loadChapterNotes(chapter);
+  }
+
   function refreshVisibleChapter() {
     chapter = cloneVisibleChapter(chapter);
   }
 
-  function closeHighlightsOnOutsideClick(event: MouseEvent) {
-    if (isHighlightsDrawerOpen && shouldCloseHighlightsDrawer(event)) {
-      isHighlightsDrawerOpen = false;
+  function chapterNotesKey(currentChapter: ScriptureChapter) {
+    return `open-scriptures:notes:${currentChapter.book}:${currentChapter.chapter}`;
+  }
+
+  function loadChapterNotes(currentChapter: ScriptureChapter) {
+    if (typeof localStorage === 'undefined') {
+      return [];
+    }
+
+    try {
+      const savedNotes = localStorage.getItem(chapterNotesKey(currentChapter));
+      if (!savedNotes) return [];
+      const parsedNotes = JSON.parse(savedNotes) as ChapterNote[];
+      const contentNotes = parsedNotes.filter((note) => note.text.trim().length > 0);
+      if (contentNotes.length !== parsedNotes.length) {
+        localStorage.setItem(chapterNotesKey(currentChapter), JSON.stringify(contentNotes));
+      }
+      return contentNotes;
+    } catch {
+      return [];
     }
   }
 
-  function openHighlightsDrawer() {
-    isHighlightsDrawerOpen = true;
+  function saveChapterNotes() {
+    if (!chapter || typeof localStorage === 'undefined') {
+      return;
+    }
+
+    localStorage.setItem(chapterNotesKey(chapter), JSON.stringify(chapterNotes));
   }
 
-  function closeHighlightsDrawer() {
-    isHighlightsDrawerOpen = false;
+  function createChapterNote(note: ChapterNote) {
+    chapterNotes = [...chapterNotes, note];
+    saveChapterNotes();
+  }
+
+  function updateChapterNote(id: string, text: string) {
+    chapterNotes = chapterNotes.map((note) => (note.id === id ? { ...note, text } : note));
+    saveChapterNotes();
+  }
+
+  function updateChapterNoteLayout(id: string, layout: Pick<ChapterNote, 'x' | 'y' | 'width' | 'height'>) {
+    chapterNotes = chapterNotes.map((note) => (note.id === id ? { ...note, ...layout } : note));
+    saveChapterNotes();
+  }
+
+  function removeChapterNotes(ids: string[]) {
+    const noteIds = new Set(ids);
+    chapterNotes = chapterNotes.filter((note) => !noteIds.has(note.id));
+    saveChapterNotes();
+  }
+
+  async function loadChapterPreviews(currentChapter: ScriptureChapter) {
+    const request = ++chapterPreviewRequest;
+
+    const [previous, next] = await Promise.all([
+      currentChapter.previous_chapter
+        ? fetchChapter(currentChapter.book, currentChapter.previous_chapter)
+        : Promise.resolve(null),
+      currentChapter.next_chapter
+        ? fetchChapter(currentChapter.book, currentChapter.next_chapter)
+        : Promise.resolve(null)
+    ]);
+
+    if (request !== chapterPreviewRequest) {
+      return;
+    }
+
+    previousChapterPreview = previous;
+    nextChapterPreview = next;
+
+    if (!hasCenteredCarousel) {
+      await tick();
+      centerCarousel();
+      hasCenteredCarousel = true;
+    }
+  }
+
+  function updateSelectionOverlay() {
+    const selection = document.getSelection();
+
+    if (!chapter || !selection || selection.rangeCount === 0 || selection.toString().trim().length === 0) {
+      selectionOverlayRects = [];
+      return;
+    }
+
+    const selectedParts = getSelectedVerseParts(
+      chapter,
+      selection,
+      (verseKey) => document.querySelector<HTMLElement>(`[data-verse-key="${CSS.escape(verseKey)}"]`)
+    );
+
+    selectionOverlayRects = selectedParts.length
+      ? Array.from(selection.getRangeAt(0).getClientRects()).filter((rect) => rect.width > 0 && rect.height > 0)
+      : [];
+  }
+
+  function updatePendingSelection() {
+    readerActions.updatePendingSelection();
+    updateSelectionOverlay();
+  }
+
+  function centerCarousel() {
+    if (carouselViewport) {
+      carouselViewport.scrollLeft = carouselPageWidth();
+    }
+  }
+
+  function carouselPageWidth() {
+    const carousel = carouselViewport?.querySelector<HTMLElement>('.chapter-carousel');
+    return carousel ? carousel.clientWidth / 3 : carouselViewport?.clientWidth ?? 0;
+  }
+
+  function handleCarouselScroll() {
+    if (isCarouselRecentering) {
+      return;
+    }
+
+    window.clearTimeout(carouselSettleTimer);
+    carouselSettleTimer = window.setTimeout(() => {
+      completeCarouselScroll();
+    }, 180);
+  }
+
+  function completeCarouselScroll() {
+    if (!carouselViewport || !chapter) {
+      return;
+    }
+
+    const pageWidth = carouselPageWidth();
+
+    if (carouselViewport.scrollLeft < pageWidth * 0.5 && previousChapterPreview) {
+      void settleChapterSwipe(previousChapterPreview, 1);
+      return;
+    }
+
+    if (carouselViewport.scrollLeft > pageWidth * 1.5 && nextChapterPreview) {
+      void settleChapterSwipe(nextChapterPreview, -1);
+      return;
+    }
+
+    carouselViewport.scrollTo({ left: pageWidth, behavior: 'smooth' });
+  }
+
+  function openChapter(book: string, chapterNumber: number) {
+    void readerActions.openChapter(book, chapterNumber);
+  }
+
+  async function settleChapterSwipe(destination: ScriptureChapter, direction: -1 | 1) {
+    const departingChapter = chapter;
+
+    if (!departingChapter) {
+      return;
+    }
+
+    isCarouselRecentering = true;
+    // Keep the chapter currently on screen in its outer slide while it becomes
+    // the center slide. This makes the recentering position visually identical.
+    if (direction === 1) {
+      previousChapterPreview = destination;
+      nextChapterPreview = departingChapter;
+    } else {
+      previousChapterPreview = departingChapter;
+      nextChapterPreview = destination;
+    }
+    chapter = destination;
+    selectedBook = destination.book;
+    pendingBook = destination.book;
+    selectedChapter = destination.chapter;
+    await tick();
+    centerCarousel();
+    await tick();
+    isCarouselRecentering = false;
+  }
+
+  async function removeHighlightOnDoubleClick(savedWord: SavedWord) {
+    readerActions.cancelPendingSelectionSave();
+    selectionOverlayRects = [];
+
+    const savedHighlight = savedHighlights.find((highlight) =>
+      highlight.words.some((word) => word.id === savedWord.id)
+    );
+
+    if (savedHighlight) {
+      await readerActions.removeSavedHighlight(savedHighlight);
+    }
   }
 
   onMount(async () => {
@@ -160,71 +345,98 @@
   />
 </svelte:head>
 
-<svelte:document on:selectionchange={readerActions.updatePendingSelection} />
+<svelte:document on:selectionchange={updatePendingSelection} />
 <svelte:window
-  on:click={closeHighlightsOnOutsideClick}
   on:pointerup={readerActions.saveCurrentSelectionSoon}
   on:mouseup={readerActions.saveCurrentSelectionSoon}
   on:touchend={readerActions.saveCurrentSelectionSoon}
+  on:scroll={updateSelectionOverlay}
+  on:resize={updateSelectionOverlay}
 />
 
-<main class:reader-shell-highlights-open={isHighlightsDrawerOpen} class="reader-shell">
-  <ReaderSidebar
-    bind:pendingBook
-    bind:selectedChapter
-    bind:bookmarkTitle
-    books={books}
-    isLoading={isLoading}
-    isSearching={isSearching}
-    searchQuery={searchQuery}
-    searchError={searchError}
-    searchResults={searchResults}
-    hasSearched={hasSearched}
-    chapterOptions={chapterOptions}
-    bookmarks={bookmarks}
-    bookmarkError={bookmarkError}
-    isLoadingBookmarks={isLoadingBookmarks}
-    isSavingBookmark={isSavingBookmark}
-    savedHighlights={savedHighlights}
-    isSavingSelection={isSavingSelection}
-    isLoadingSavedWords={isLoadingSavedWords}
-    savedWordsError={savedWordsError}
-    onBookChange={readerActions.handleBookChange}
-    onChapterChange={readerActions.handleChapterChange}
-    onSearch={readerActions.handleSearch}
-    onClearSearch={readerActions.clearSearch}
-    openSearchResult={readerActions.openSearchResult}
-    openHighlightsDrawer={openHighlightsDrawer}
-    onSaveBookmark={readerActions.saveCurrentBookmark}
-    onOpenBookmark={readerActions.openBookmark}
-    onRemoveBookmark={readerActions.removeBookmark}
-  />
+<main
+  bind:this={carouselViewport}
+  class="reader-shell chapter-carousel-viewport"
+  class:carousel-recentering={isCarouselRecentering}
+  on:scroll={handleCarouselScroll}
+>
+  <div class="chapter-carousel">
+    <div class="chapter-slide">
+      {#if previousChapterPreview}
+        <ChapterView
+          bind:activeHighlightId
+          chapter={previousChapterPreview}
+          totalVerses={previousChapterPreview.verses.length}
+          verseSegments={(verse) => verseSegmentsForChapter(previousChapterPreview, verse, savedWordsByVerse)}
+          {highlightId}
+          {highlightKey}
+          onRemoveHighlight={removeHighlightOnDoubleClick}
+          onPreviousChapter={() =>
+            previousChapterPreview?.previous_chapter &&
+            openChapter(previousChapterPreview.book, previousChapterPreview.previous_chapter)}
+          onNextChapter={() => openChapter(previousChapterPreview!.book, previousChapterPreview!.chapter)}
+        />
+      {/if}
+    </div>
 
-  <ChapterView
-    bind:activeHighlightId
-    chapter={chapter}
-    isLoading={isLoading}
-    errorMessage={errorMessage}
-    totalVerses={totalVerses}
-    verseSegments={(verse) => verseSegmentsForChapter(chapter, verse, savedWordsByVerse)}
-    highlightId={highlightId}
-    highlightKey={highlightKey}
-    onPreviousChapter={() => chapter?.previous_chapter && readerActions.openChapter(chapter.book, chapter.previous_chapter)}
-    onNextChapter={() => chapter?.next_chapter && readerActions.openChapter(chapter.book, chapter.next_chapter)}
-  />
+    <div class="chapter-slide">
+      <ChapterView
+        bind:activeHighlightId
+        {chapter}
+        isLoading={isLoading}
+        errorMessage={errorMessage}
+        totalVerses={totalVerses}
+        verseSegments={(verse) => verseSegmentsForChapter(chapter, verse, savedWordsByVerse)}
+        {highlightId}
+        {highlightKey}
+        onRemoveHighlight={removeHighlightOnDoubleClick}
+        notes={chapterNotes}
+        onCreateNote={createChapterNote}
+        onUpdateNote={updateChapterNote}
+        onUpdateNoteLayout={updateChapterNoteLayout}
+        onRemoveNotes={removeChapterNotes}
+        onPreviousChapter={() => chapter?.previous_chapter && openChapter(chapter.book, chapter.previous_chapter)}
+        onNextChapter={() => chapter?.next_chapter && openChapter(chapter.book, chapter.next_chapter)}
+      />
+    </div>
 
-  <HighlightsDrawer
-    isOpen={isHighlightsDrawerOpen}
-    savedHighlights={savedHighlights}
-    onClose={closeHighlightsDrawer}
-    onOpenHighlight={readerActions.openSavedHighlight}
-    onRemoveHighlight={readerActions.removeSavedHighlight}
-  />
+    <div class="chapter-slide">
+      {#if nextChapterPreview}
+      <ChapterView
+          bind:activeHighlightId
+          chapter={nextChapterPreview}
+          totalVerses={nextChapterPreview.verses.length}
+          verseSegments={(verse) => verseSegmentsForChapter(nextChapterPreview, verse, savedWordsByVerse)}
+          {highlightId}
+          {highlightKey}
+        onRemoveHighlight={removeHighlightOnDoubleClick}
+          onPreviousChapter={() => openChapter(nextChapterPreview!.book, nextChapterPreview!.chapter)}
+          onNextChapter={() =>
+            nextChapterPreview?.next_chapter && openChapter(nextChapterPreview.book, nextChapterPreview.next_chapter)}
+        />
+      {/if}
+    </div>
+  </div>
 </main>
+
+{#if selectionOverlayRects.length > 0}
+  <div class="selection-overlay" aria-hidden="true">
+    {#each selectionOverlayRects as rect}
+      <span
+        style={`left: ${rect.left}px; top: ${rect.top}px; width: ${rect.width}px; height: ${rect.height}px;`}
+      ></span>
+    {/each}
+  </div>
+{/if}
 
 <style>
   :global(*) {
     box-sizing: border-box;
+  }
+
+  :global(::selection) {
+    color: inherit;
+    background: transparent;
   }
 
   :global(html) {
@@ -256,11 +468,8 @@
   }
 
   .reader-shell {
-    --shell-gap: clamp(1rem, 1.8vw, 1.5rem);
     --shell-padding: clamp(1rem, 3vw, 2.25rem);
-    --shell-max-width: 1180px;
-    --sidebar-width: clamp(11rem, 18vw, 14rem);
-    --drawer-width: clamp(14rem, 22vw, 18rem);
+    --shell-max-width: 900px;
     --panel-title-size: 0.82rem;
     --panel-title-line-height: 1.2;
     --panel-title-weight: 850;
@@ -281,46 +490,68 @@
     --sticky-panel-max-height: calc(
       100dvh - (var(--sticky-inset) * 2) - env(safe-area-inset-bottom, 0px)
     );
-    display: grid;
-    grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
-    gap: var(--shell-gap);
-    align-items: start;
     width: 100%;
-    max-width: var(--shell-max-width);
+    max-width: none;
     margin: 0 auto;
     padding: var(--shell-padding);
   }
 
-  .reader-shell-highlights-open {
-    --shell-max-width: 1560px;
-    grid-template-columns: var(--sidebar-width) minmax(0, 1fr) var(--drawer-width);
+  .chapter-carousel-viewport {
+    padding: 0;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-behavior: smooth;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
   }
 
-  @media (max-width: 980px) {
-    .reader-shell-highlights-open {
-      --shell-max-width: 1180px;
-      grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
-    }
+  .chapter-carousel-viewport::-webkit-scrollbar {
+    display: none;
+  }
+
+  .chapter-carousel-viewport.carousel-recentering {
+    scroll-behavior: auto;
+  }
+
+  .chapter-carousel {
+    display: flex;
+    width: 300%;
+  }
+
+  .chapter-slide {
+    flex: 0 0 33.333333333333%;
+    min-width: 0;
+    padding: 0;
+    scroll-snap-align: start;
+  }
+
+  .chapter-carousel :global(.chapter-view) {
+    min-height: 100dvh;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .selection-overlay {
+    position: fixed;
+    z-index: 20;
+    inset: 0;
+    pointer-events: none;
+  }
+
+  .selection-overlay span {
+    position: fixed;
+    border-radius: 4px;
+    background: rgba(227, 178, 75, 0.34);
   }
 
   @media (max-width: 900px) {
     .reader-shell {
-      display: block;
-      padding: calc(100dvh - env(safe-area-inset-bottom, 0px)) 0 0;
-      overflow-x: hidden;
+      padding: 0;
     }
 
-    .reader-shell-highlights-open {
-      width: 100%;
-      max-width: 100%;
-      padding-inline: 0;
-    }
-  }
-
-  @media (max-width: 500px) {
-    .reader-shell,
-    .reader-shell-highlights-open {
-      grid-template-columns: minmax(0, 1fr);
+    .chapter-slide {
+      padding: 0;
     }
   }
 </style>

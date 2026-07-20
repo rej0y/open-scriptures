@@ -64,6 +64,17 @@ export type ChapterBookmark = {
   created_at: string;
 };
 
+export type ChapterNote = {
+  id: string;
+  book: string;
+  chapter: number;
+  x: number;
+  y: number;
+  width?: number;
+  height?: number;
+  text: string;
+};
+
 export type VerseSegment = {
   text: string;
   savedWord?: SavedWord;

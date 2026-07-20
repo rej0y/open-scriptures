@@ -4,6 +4,7 @@ import test from 'node:test';
 import { createReaderNavigationActions } from '$lib/readerActionsNavigation';
 import { createReaderSavedWordActions } from '$lib/readerActionsSavedWords';
 import { createReaderSearchActions } from '$lib/readerActionsSearch';
+import { createReaderSelectionActions } from '$lib/readerActionsSelection';
 import type { ReaderActionDeps, ReaderActionState } from '$lib/readerActionsTypes';
 import type {
   ChapterBookmark,
@@ -397,4 +398,37 @@ test('saved word actions reload data after removal and expose chapter-local refr
 
   await actions.removeSavedHighlight(savedHighlight);
   assert.deepStrictEqual(highlightRemovals, ['group-a']);
+});
+
+test('cancelling a pending selection save prevents a deleted highlight from being recreated', async () => {
+  const { state, snapshot } = createState({ chapter });
+  const selection = { removeAllRanges: () => undefined } as unknown as Selection;
+  const selectionPart: SelectionPart = {
+    verse: chapter.verses[0],
+    selectedText: 'beta',
+    startOffset: 6,
+    endOffset: 10
+  };
+  let saveCalls = 0;
+
+  const actions = createReaderSelectionActions(
+    state,
+    {
+      ...baseDeps,
+      getSelection: () => selection,
+      getSelectedVerseParts: () => [selectionPart],
+      persistSelection: async () => {
+        saveCalls += 1;
+        return [];
+      }
+    },
+    async () => undefined
+  );
+
+  actions.saveCurrentSelectionSoon();
+  actions.cancelPendingSelectionSave();
+  await new Promise((resolve) => setTimeout(resolve, 80));
+
+  assert.equal(saveCalls, 0);
+  assert.deepStrictEqual(snapshot().pendingSelectionParts, []);
 });

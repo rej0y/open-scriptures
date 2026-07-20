@@ -604,3 +604,135 @@ test('browser UI integration', async (t) => {
     assert(commands.includes('remove_bookmark'));
   });
 });
+
+test('note moves when the second click is held and dragged', async (t) => {
+  const harness = await createHarness();
+  t.after(async () => {
+    await harness.close();
+  });
+
+  await waitFor(harness.client, async () => (await getText(harness.client, 'h1')) === '1 Nephi 1');
+  const start = await evaluate(
+    harness.client,
+    `(async () => {
+      const chapter = document.querySelector('.chapter-view');
+      const chapterBounds = chapter.getBoundingClientRect();
+      chapter.dispatchEvent(new MouseEvent('dblclick', {
+        bubbles: true,
+        clientX: Math.min(chapterBounds.right - 40, window.innerWidth - 40),
+        clientY: chapterBounds.top + 40
+      }));
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      const textarea = document.querySelector('.chapter-note textarea');
+      textarea.value = 'move me';
+      textarea.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: 'move me' }));
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      const note = document.querySelector('.chapter-note');
+      note.scrollIntoView({ block: 'center' });
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      const before = note.getBoundingClientRect();
+      const x = before.left + before.width / 2;
+      const y = before.top + before.height / 2;
+      return { x, y, target: document.elementFromPoint(x, y)?.className ?? null, before: { left: before.left, top: before.top } };
+    })()`
+  );
+
+  await harness.client.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: start.x, y: start.y, button: 'left', buttons: 1, clickCount: 1 });
+  await harness.client.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: start.x, y: start.y, button: 'left', buttons: 0, clickCount: 1 });
+  await harness.client.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: start.x, y: start.y, button: 'left', buttons: 1, clickCount: 2 });
+  await harness.client.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: start.x + 80, y: start.y + 80, button: 'left', buttons: 1 });
+  await harness.client.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: start.x + 80, y: start.y + 80, button: 'left', buttons: 0, clickCount: 2 });
+  await delay(30);
+  const after = await evaluate(harness.client, `(() => { const bounds = document.querySelector('.chapter-note').getBoundingClientRect(); return { left: bounds.left, top: bounds.top }; })()`);
+
+  assert.notEqual(after.left, start.before.left, JSON.stringify({ start, after }));
+});
+
+test('note bottom edge reaches the dragged height without clipping text', async (t) => {
+  const harness = await createHarness();
+  t.after(async () => {
+    await harness.close();
+  });
+
+  const start = await evaluate(
+    harness.client,
+    `(async () => {
+      const chapter = document.querySelector('.chapter-view');
+      const chapterBounds = chapter.getBoundingClientRect();
+      chapter.dispatchEvent(new MouseEvent('dblclick', {
+        bubbles: true,
+        clientX: chapterBounds.left + 40,
+        clientY: chapterBounds.top + chapter.scrollHeight + 80
+      }));
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      const textarea = document.querySelector('.chapter-note textarea');
+      textarea.value = 'A note with enough words to wrap across several lines.';
+      textarea.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText' }));
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      textarea.focus();
+      const note = document.querySelector('.chapter-note');
+      const noteBounds = note.getBoundingClientRect();
+      const handleBounds = document.querySelector('.note-handle-bottom').getBoundingClientRect();
+      return {
+        x: handleBounds.left + handleBounds.width / 2,
+        y: handleBounds.top + handleBounds.height / 2,
+        before: { width: noteBounds.width, height: noteBounds.height }
+      };
+    })()`
+  );
+
+  await evaluate(
+    harness.client,
+    `(() => {
+      const chapter = document.querySelector('.chapter-view');
+      const handle = document.querySelector('.note-handle-bottom');
+      chapter.setPointerCapture = () => {};
+      handle.dispatchEvent(new PointerEvent('pointerdown', {
+        bubbles: true,
+        pointerId: 1,
+        isPrimary: true,
+        button: 0,
+        buttons: 1,
+        clientX: ${start.x},
+        clientY: ${start.y}
+      }));
+      chapter.dispatchEvent(new PointerEvent('pointermove', {
+        bubbles: true,
+        pointerId: 1,
+        isPrimary: true,
+        button: 0,
+        buttons: 1,
+        clientX: ${start.x},
+        clientY: ${start.y + 120}
+      }));
+      chapter.dispatchEvent(new PointerEvent('pointerup', {
+        bubbles: true,
+        pointerId: 1,
+        isPrimary: true,
+        button: 0,
+        buttons: 0,
+        clientX: ${start.x},
+        clientY: ${start.y + 120}
+      }));
+    })()`
+  );
+  await delay(30);
+
+  const after = await evaluate(
+    harness.client,
+    `(() => {
+      const note = document.querySelector('.chapter-note').getBoundingClientRect();
+      const textarea = document.querySelector('.chapter-note textarea');
+      return {
+        width: note.width,
+        height: note.height,
+        scrollHeight: textarea.scrollHeight,
+        clientHeight: textarea.clientHeight
+      };
+    })()`
+  );
+
+  assert(after.height >= start.before.height + 110, JSON.stringify({ start, after }));
+  assert(after.width < start.before.width, JSON.stringify({ start, after }));
+  assert(after.scrollHeight <= after.clientHeight, JSON.stringify(after));
+});
