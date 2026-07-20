@@ -13,7 +13,7 @@
     <div class="drawer-heading">
       <div>
         <p class="eyebrow">Saved</p>
-        <h2>Highlights</h2>
+        <h2 class="drawer-title">Highlights</h2>
       </div>
       <button type="button" class="close-drawer-button" aria-label="Close highlights" on:click={onClose}>
         &times;
@@ -64,10 +64,10 @@
     overflow: hidden;
     overscroll-behavior: contain;
     padding: 1rem;
-    border: 1px solid rgba(29, 37, 45, 0.1);
+    border: 1px solid var(--panel-border-color);
     border-radius: 8px;
-    background: rgba(255, 255, 255, 0.96);
-    box-shadow: 0 24px 80px rgba(29, 37, 45, 0.18);
+    background: var(--panel-surface);
+    box-shadow: 0 24px 80px rgba(31, 46, 42, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.7);
   }
 
   .drawer-heading {
@@ -77,20 +77,23 @@
     align-items: start;
     justify-content: space-between;
     padding-bottom: 0.8rem;
-    border-bottom: 1px solid rgba(29, 37, 45, 0.09);
+    border-bottom: 1px solid var(--panel-border-color);
   }
 
-  .drawer-heading h2 {
+  .drawer-title {
     margin: 0;
-    color: #111820;
-    font-family: Georgia, "Times New Roman", serif;
-    font-size: 1.65rem;
-    line-height: 1.05;
+    color: var(--panel-title-color);
+    font-family: inherit;
+    font-size: 0.82rem !important;
+    font-weight: 850;
+    line-height: 1.2;
+    letter-spacing: 0;
+    text-transform: uppercase;
   }
 
   .eyebrow {
     margin: 0;
-    color: #56615c;
+    color: var(--panel-title-color);
     font-size: 0.78rem;
     font-weight: 800;
     letter-spacing: 0;
@@ -107,10 +110,10 @@
     width: 2rem;
     height: 2rem;
     place-items: center;
-    border: 1px solid rgba(29, 37, 45, 0.12);
+    border: 1px solid var(--control-border-color);
     border-radius: 6px;
-    color: #52605b;
-    background: #ffffff;
+    color: var(--panel-title-color);
+    background: var(--control-surface);
     font: inherit;
     font-size: 1.25rem;
     font-weight: 700;
@@ -119,14 +122,14 @@
   }
 
   .close-drawer-button:hover {
-    border-color: rgba(47, 111, 104, 0.28);
-    background: rgba(47, 111, 104, 0.08);
+    border-color: var(--accent-color);
+    background: var(--accent-color-muted);
   }
 
   .close-drawer-button:focus-visible,
   .remove-highlight-button:focus-visible,
   .highlight-link:focus-visible {
-    outline: 3px solid rgba(47, 111, 104, 0.2);
+    outline: 3px solid var(--accent-color-muted);
     outline-offset: 2px;
   }
 
@@ -135,7 +138,7 @@
     border: 0;
     border-radius: 6px;
     padding: 0.3rem 0.45rem;
-    color: #52605b;
+    color: var(--panel-title-color);
     background: transparent;
     font: inherit;
     font-size: 0.74rem;
@@ -145,12 +148,12 @@
   }
 
   .remove-highlight-button:hover {
-    background: rgba(47, 111, 104, 0.08);
+    background: var(--accent-color-muted);
   }
 
   .panel-status {
     margin: 0;
-    color: #56615c;
+    color: var(--panel-muted-color);
     font-size: 0.82rem;
     line-height: 1.45;
   }
@@ -173,7 +176,7 @@
     gap: 0.35rem;
     align-items: start;
     padding: 0.85rem 0;
-    border-bottom: 1px solid rgba(29, 37, 45, 0.08);
+    border-bottom: 1px solid var(--panel-border-color);
   }
 
   .highlight-link {
@@ -184,7 +187,7 @@
     border: 0;
     border-radius: 6px;
     padding: 0.2rem 0.3rem;
-    color: #252b31;
+    color: var(--panel-text-color);
     background: transparent;
     font: inherit;
     font-family: Georgia, "Times New Roman", serif;
@@ -196,11 +199,11 @@
   }
 
   .highlight-link:hover {
-    background: rgba(47, 111, 104, 0.07);
+    background: var(--accent-color-muted);
   }
 
   .highlight-link span {
-    color: #6b756f;
+    color: var(--panel-muted-color);
     font-family:
       Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     font-size: 0.72rem;

@@ -103,10 +103,10 @@
     overflow: hidden;
     min-height: calc(100vh - clamp(2rem, 8vw, 5rem));
     padding: clamp(1.4rem, 4vw, 3.5rem);
-    border: 1px solid rgba(29, 37, 45, 0.08);
+    border: 1px solid var(--panel-border-color);
     border-radius: 8px;
-    background: #ffffff;
-    box-shadow: 0 24px 70px rgba(29, 37, 45, 0.08);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(250, 252, 251, 0.94));
+    box-shadow: 0 24px 70px rgba(31, 46, 42, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.8);
   }
 
   :global(.reader-shell-highlights-open) .chapter-view {
@@ -117,12 +117,12 @@
     max-width: 760px;
     margin-bottom: clamp(2rem, 5vw, 3.25rem);
     padding-bottom: 1.2rem;
-    border-bottom: 1px solid rgba(29, 37, 45, 0.09);
+    border-bottom: 1px solid var(--panel-border-color);
   }
 
   .chapter-header h1 {
     margin: 0 0 0.65rem;
-    color: #111820;
+    color: var(--panel-text-color);
     font-family: Georgia, "Times New Roman", serif;
     font-size: clamp(2.4rem, 7vw, 4.75rem);
     font-weight: 700;
@@ -131,7 +131,7 @@
 
   .eyebrow {
     margin: 0 0 0.55rem;
-    color: #2f6f68;
+    color: var(--accent-color);
     font-size: 0.78rem;
     font-weight: 800;
     letter-spacing: 0;
@@ -152,7 +152,7 @@
   }
 
   .chapter-meta span {
-    color: #56615c;
+    color: var(--panel-muted-color);
     font-size: 0.94rem;
     line-height: 1.35;
   }
@@ -160,13 +160,13 @@
   .chapter-meta span:not(:last-child)::after {
     content: "/";
     margin-left: 0.6rem;
-    color: #a6afaa;
+    color: rgba(102, 117, 111, 0.58);
   }
 
   .chapter-header p:last-child,
   .empty-state p:last-child {
     margin-bottom: 0;
-    color: #56615c;
+    color: var(--panel-muted-color);
     line-height: 1.65;
   }
 
@@ -192,7 +192,7 @@
 
   .verse-row p {
     margin: 0;
-    color: #252b31;
+    color: var(--panel-text-color);
     font-size: clamp(1.08rem, 2vw, 1.2rem);
     line-height: 1.86;
     overflow-wrap: anywhere;
@@ -222,7 +222,7 @@
     display: inline-block;
     min-width: 1.7rem;
     margin-right: 0.38rem;
-    color: #6b756f;
+    color: var(--panel-muted-color);
     font-family:
       Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     font-size: 0.72em;
@@ -242,7 +242,7 @@
 
   .status {
     margin-bottom: 0;
-    color: #56615c;
+    color: var(--panel-muted-color);
     line-height: 1.65;
   }
 
@@ -256,7 +256,7 @@
     max-width: 760px;
     margin-top: clamp(2.25rem, 5vw, 3.5rem);
     padding-top: 1.15rem;
-    border-top: 1px solid rgba(29, 37, 45, 0.09);
+    border-top: 1px solid var(--panel-border-color);
   }
 
   .chapter-nav {
@@ -272,10 +272,10 @@
     justify-content: center;
     width: 2.85rem;
     height: 2.85rem;
-    border: 1px solid rgba(29, 37, 45, 0.12);
+    border: 1px solid var(--control-border-color);
     border-radius: 8px;
-    color: #182127;
-    background: #fff;
+    color: var(--panel-text-color);
+    background: var(--control-surface);
     font: inherit;
     font-size: 1.25rem;
     font-weight: 800;
@@ -288,13 +288,13 @@
   }
 
   .chapter-nav button:focus-visible {
-    outline: 3px solid rgba(47, 111, 104, 0.2);
+    outline: 3px solid var(--accent-color-muted);
     outline-offset: 2px;
   }
 
   .chapter-nav button:not(:disabled):hover {
-    border-color: rgba(47, 111, 104, 0.34);
-    background: #f5f8f7;
+    border-color: var(--accent-color);
+    background: var(--accent-color-muted);
     transform: translateY(-1px);
   }
 

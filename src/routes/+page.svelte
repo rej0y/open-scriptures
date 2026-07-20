@@ -241,7 +241,9 @@
     min-height: 100vh;
     overflow-x: clip;
     color: #1d252d;
-    background: linear-gradient(180deg, #f5f7f6 0%, #eef2f1 100%);
+    background:
+      linear-gradient(135deg, rgba(47, 111, 104, 0.1) 0%, rgba(247, 250, 248, 0) 42%),
+      linear-gradient(180deg, #f6f8f5 0%, #e8eeeb 100%);
     font-family:
       Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     text-rendering: optimizeLegibility;
@@ -259,6 +261,22 @@
     --shell-max-width: 1180px;
     --sidebar-width: clamp(11rem, 18vw, 14rem);
     --drawer-width: clamp(14rem, 22vw, 18rem);
+    --panel-title-size: 0.82rem;
+    --panel-title-line-height: 1.2;
+    --panel-title-weight: 850;
+    --panel-title-letter-spacing: 0;
+    --panel-title-transform: uppercase;
+    --panel-title-color: #425b55;
+    --panel-text-color: #1c2a2e;
+    --panel-muted-color: #66756f;
+    --panel-border-color: rgba(52, 79, 72, 0.16);
+    --panel-surface: linear-gradient(145deg, rgba(255, 255, 255, 0.92), rgba(245, 249, 247, 0.78));
+    --panel-shadow: 0 18px 46px rgba(31, 46, 42, 0.09), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+    --control-surface: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(244, 248, 246, 0.82));
+    --control-border-color: rgba(50, 67, 63, 0.24);
+    --accent-color: #2f766d;
+    --accent-color-hover: #285f58;
+    --accent-color-muted: rgba(47, 118, 109, 0.12);
     --sticky-inset: var(--shell-padding);
     --sticky-panel-max-height: calc(
       100dvh - (var(--sticky-inset) * 2) - env(safe-area-inset-bottom, 0px)

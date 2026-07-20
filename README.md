@@ -11,6 +11,7 @@ The goal is to build a local-first desktop app that can eventually support advan
 - Book and chapter navigation
 - Previous and next chapter controls
 - Scripture search with clickable results
+- Chapter bookmarks
 - Saved word selections stored in local app data
 - Responsive reader layout with a minimal reading-focused design
 
@@ -91,7 +92,6 @@ cargo check
 
 - [ ] Add note taking
 - [x] Add saved word highlights
-- [ ] Add bookmarks and saved word selections
 - [ ] Add stronger search tools, including filters and phrase matching
 - [ ] Add cross-references and study links
 - [ ] Add user-owned local study data storage

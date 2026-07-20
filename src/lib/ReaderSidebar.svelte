@@ -5,6 +5,8 @@
     ScriptureBook,
     ScriptureSearchResult
   } from '$lib/study';
+  import BookmarkPanel from '$lib/BookmarkPanel.svelte';
+  import SearchPanel from '$lib/SearchPanel.svelte';
 
   export let books: ScriptureBook[] = [];
   export let pendingBook = '';
@@ -73,48 +75,16 @@
     </label>
   </form>
 
-  <section class="search-panel" aria-label="Search scriptures">
-    <form class="search-form" on:submit|preventDefault={onSearch}>
-      <label>
-        <span>Search</span>
-        <input
-          type="search"
-          bind:value={searchQuery}
-          placeholder="Find words or phrases"
-          disabled={isSearching}
-        />
-      </label>
-
-      <div class="search-actions">
-        <button type="submit" disabled={isSearching}>
-          {isSearching ? 'Searching' : 'Search'}
-        </button>
-        <button type="button" class="secondary-button" disabled={isSearching} on:click={onClearSearch}>
-          Clear
-        </button>
-      </div>
-    </form>
-
-    {#if searchError}
-      <p class="search-status" role="alert">{searchError}</p>
-    {:else if isSearching}
-      <p class="search-status">Searching...</p>
-    {:else if hasSearched && searchResults.length === 0}
-      <p class="search-status">No results found.</p>
-    {:else if searchResults.length > 0}
-      <ol class="search-results" aria-label="Search results">
-        {#each searchResults as result}
-          <li>
-            <button type="button" on:click={() => openSearchResult(result)}>
-              <span>{result.reference}</span>
-              <small>{result.volume}</small>
-              <p>{result.text}</p>
-            </button>
-          </li>
-        {/each}
-      </ol>
-    {/if}
-  </section>
+  <SearchPanel
+    bind:searchQuery
+    isSearching={isSearching}
+    searchError={searchError}
+    searchResults={searchResults}
+    hasSearched={hasSearched}
+    onSearch={onSearch}
+    onClearSearch={onClearSearch}
+    openSearchResult={openSearchResult}
+  />
 
   <section class="saved-panel" aria-label="Saved highlights">
     <div class="panel-heading">
@@ -142,55 +112,16 @@
     </button>
   </section>
 
-  <section class="bookmark-panel" aria-label="Chapter bookmarks">
-    <div class="panel-heading">
-      <h2>Bookmarks</h2>
-      <span>{bookmarks.length}</span>
-    </div>
-
-    <form class="bookmark-form" on:submit|preventDefault={onSaveBookmark}>
-      <label>
-        <span>Title</span>
-        <input
-          type="text"
-          bind:value={bookmarkTitle}
-          placeholder="Name this chapter"
-          disabled={isSavingBookmark}
-        />
-      </label>
-
-      <button type="submit" disabled={isSavingBookmark || bookmarkTitle.trim().length === 0}>
-        {isSavingBookmark ? 'Saving' : 'Save chapter'}
-      </button>
-    </form>
-
-    {#if bookmarkError}
-      <p class="panel-status" role="alert">{bookmarkError}</p>
-    {:else if isLoadingBookmarks}
-      <p class="panel-status">Loading bookmarks...</p>
-    {:else if bookmarks.length === 0}
-      <p class="panel-status">No chapter bookmarks yet.</p>
-    {:else}
-      <ol class="bookmark-list" aria-label="Chapter bookmarks">
-        {#each bookmarks as bookmark}
-          <li>
-            <button type="button" class="bookmark-link" on:click={() => onOpenBookmark(bookmark)}>
-              <span>{bookmark.title}</span>
-              <small>{bookmark.reference}</small>
-            </button>
-            <button
-              type="button"
-              class="remove-bookmark-button"
-              aria-label="Remove bookmark"
-              on:click|stopPropagation={() => onRemoveBookmark(bookmark)}
-            >
-              Remove
-            </button>
-          </li>
-        {/each}
-      </ol>
-    {/if}
-  </section>
+  <BookmarkPanel
+    bind:bookmarkTitle
+    bookmarks={bookmarks}
+    bookmarkError={bookmarkError}
+    isLoadingBookmarks={isLoadingBookmarks}
+    isSavingBookmark={isSavingBookmark}
+    onSaveBookmark={onSaveBookmark}
+    onOpenBookmark={onOpenBookmark}
+    onRemoveBookmark={onRemoveBookmark}
+  />
 </aside>
 
 <style>
@@ -211,144 +142,23 @@
   }
 
   .reader-toolbar,
-  .search-panel,
   .saved-panel {
     display: grid;
     min-width: 0;
     width: 100%;
-    padding: 0.8rem;
-    border: 1px solid rgba(29, 37, 45, 0.09);
+    padding: 0.95rem;
+    border: 1px solid var(--panel-border-color);
     border-radius: 8px;
-    background: rgba(255, 255, 255, 0.82);
-    box-shadow: 0 16px 40px rgba(29, 37, 45, 0.06);
+    background: var(--panel-surface);
+    box-shadow: var(--panel-shadow);
   }
 
   .reader-toolbar {
     gap: 0.85rem;
   }
 
-  .search-panel,
-  .search-form,
   .saved-panel {
     gap: 0.75rem;
-  }
-
-  .reader-toolbar label,
-  .search-form label {
-    display: grid;
-    min-width: 0;
-    gap: 0.4rem;
-    color: #52605b;
-    font-size: 0.7rem;
-    font-weight: 800;
-    letter-spacing: 0;
-    text-transform: uppercase;
-  }
-
-  .reader-toolbar select,
-  .search-form input {
-    min-width: 0;
-    min-height: 2.55rem;
-    width: 100%;
-    border: 1px solid rgba(29, 37, 45, 0.12);
-    border-radius: 6px;
-    padding: 0 2rem 0 0.75rem;
-    color: #182127;
-    background: #ffffff;
-    font: inherit;
-    font-size: 0.9rem;
-    font-weight: 750;
-  }
-
-  .search-form input {
-    padding-right: 0.75rem;
-    text-transform: none;
-  }
-
-  .reader-toolbar select:focus-visible,
-  .search-form input:focus-visible,
-  .search-actions button:focus-visible,
-  .search-results button:focus-visible,
-  .open-highlights-button:focus-visible {
-    outline: 3px solid rgba(47, 111, 104, 0.2);
-    outline-offset: 2px;
-  }
-
-  .search-form {
-    display: grid;
-    min-width: 0;
-  }
-
-  .search-actions {
-    display: grid;
-    min-width: 0;
-    grid-template-columns: minmax(0, 1fr) minmax(0, auto);
-    gap: 0.45rem;
-  }
-
-  .search-actions button,
-  .search-results button,
-  .open-highlights-button {
-    border: 1px solid rgba(29, 37, 45, 0.12);
-    border-radius: 6px;
-    color: #182127;
-    background: #ffffff;
-    font: inherit;
-    cursor: pointer;
-  }
-
-  .search-actions button {
-    min-width: 0;
-    min-height: 2.35rem;
-    padding: 0 0.7rem;
-    font-size: 0.82rem;
-    font-weight: 800;
-  }
-
-  .open-highlights-button {
-    width: 100%;
-    min-width: 0;
-    min-height: 2.35rem;
-    color: #ffffff;
-    border-color: #2f6f68;
-    background: #2f6f68;
-    font-size: 0.82rem;
-    font-weight: 850;
-  }
-
-  .search-actions button[type='submit'] {
-    color: #ffffff;
-    border-color: #2f6f68;
-    background: #2f6f68;
-  }
-
-  .bookmark-panel {
-    display: grid;
-    gap: 0.75rem;
-    min-width: 0;
-    width: 100%;
-    padding: 0.8rem;
-    border: 1px solid rgba(29, 37, 45, 0.09);
-    border-radius: 8px;
-    background: rgba(255, 255, 255, 0.82);
-    box-shadow: 0 16px 40px rgba(29, 37, 45, 0.06);
-  }
-
-  .search-actions button:disabled {
-    cursor: default;
-    opacity: 0.55;
-  }
-
-  .secondary-button {
-    color: #52605b;
-  }
-
-  .search-status,
-  .panel-status {
-    margin: 0;
-    color: #56615c;
-    font-size: 0.82rem;
-    line-height: 1.45;
   }
 
   .panel-heading {
@@ -360,11 +170,12 @@
 
   .panel-heading h2 {
     margin: 0;
-    color: #182127;
-    font-size: 0.82rem;
-    font-weight: 850;
-    letter-spacing: 0;
-    text-transform: uppercase;
+    color: var(--panel-title-color);
+    font-size: var(--panel-title-size);
+    font-weight: var(--panel-title-weight);
+    line-height: var(--panel-title-line-height);
+    letter-spacing: var(--panel-title-letter-spacing);
+    text-transform: var(--panel-title-transform);
   }
 
   .panel-heading span {
@@ -374,204 +185,60 @@
     place-items: center;
     border-radius: 999px;
     color: #ffffff;
-    background: #2f6f68;
+    background: var(--accent-color);
     font-size: 0.72rem;
     font-weight: 850;
     line-height: 1;
   }
 
-  .search-results {
+  .reader-toolbar label {
     display: grid;
-    gap: 0.55rem;
-    max-height: min(42vh, 28rem);
-    margin: 0;
-    padding: 0;
-    overflow: auto;
-    list-style: none;
-  }
-
-  .search-results li {
     min-width: 0;
-  }
-
-  .bookmark-form {
-    display: grid;
-    gap: 0.55rem;
-  }
-
-  .bookmark-form label {
-    display: grid;
     gap: 0.4rem;
-    color: #52605b;
-    font-size: 0.7rem;
-    font-weight: 800;
-    letter-spacing: 0;
-    text-transform: uppercase;
+    color: var(--panel-title-color);
+    font-size: var(--panel-title-size);
+    font-weight: var(--panel-title-weight);
+    line-height: var(--panel-title-line-height);
+    letter-spacing: var(--panel-title-letter-spacing);
+    text-transform: var(--panel-title-transform);
   }
 
-  .bookmark-form input {
+  .reader-toolbar select {
     min-width: 0;
     min-height: 2.55rem;
     width: 100%;
-    border: 1px solid rgba(29, 37, 45, 0.12);
+    border: 1px solid var(--control-border-color);
     border-radius: 6px;
-    padding: 0 0.75rem;
-    color: #182127;
-    background: #ffffff;
+    padding: 0 2rem 0 0.75rem;
+    color: var(--panel-text-color);
+    background: var(--control-surface);
     font: inherit;
     font-size: 0.9rem;
     font-weight: 750;
   }
 
-  .bookmark-form input:focus-visible,
-  .bookmark-form button:focus-visible,
-  .bookmark-link:focus-visible,
-  .remove-bookmark-button:focus-visible {
-    outline: 3px solid rgba(47, 111, 104, 0.2);
+  .reader-toolbar select:focus-visible,
+  .open-highlights-button:focus-visible {
+    outline: 3px solid var(--accent-color-muted);
     outline-offset: 2px;
   }
 
-  .bookmark-form button {
+  .open-highlights-button {
+    width: 100%;
     min-width: 0;
     min-height: 2.35rem;
-    padding: 0 0.7rem;
-    border: 1px solid #2f6f68;
+    border: 1px solid var(--accent-color);
     border-radius: 6px;
     color: #ffffff;
-    background: #2f6f68;
+    background: linear-gradient(180deg, var(--accent-color), #276a62);
     font: inherit;
     font-size: 0.82rem;
-    font-weight: 800;
-    cursor: pointer;
-  }
-
-  .bookmark-form button:disabled {
-    cursor: default;
-    opacity: 0.55;
-  }
-
-  .bookmark-list {
-    display: grid;
-    gap: 0.55rem;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-
-  .bookmark-list li {
-    display: grid;
-    gap: 0.35rem;
-    padding: 0.65rem 0;
-    border-top: 1px solid rgba(29, 37, 45, 0.08);
-  }
-
-  .bookmark-link {
-    display: grid;
-    gap: 0.18rem;
-    width: 100%;
-    min-width: 0;
-    border: 0;
-    border-radius: 6px;
-    padding: 0.2rem 0.3rem;
-    color: #252b31;
-    background: transparent;
-    font: inherit;
-    text-align: left;
-    overflow-wrap: anywhere;
-    cursor: pointer;
-  }
-
-  .bookmark-link:hover {
-    background: rgba(47, 111, 104, 0.08);
-  }
-
-  .bookmark-link span {
-    color: #182127;
-    font-size: 0.88rem;
-    font-weight: 800;
-    line-height: 1.25;
-  }
-
-  .bookmark-link {
-    font-family: Georgia, "Times New Roman", serif;
-    font-size: 1rem;
-    line-height: 1.45;
-  }
-
-  .bookmark-link small {
-    color: #6b756f;
-    font-family:
-      Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    font-size: 0.72rem;
     font-weight: 850;
-    line-height: 1.2;
-    text-transform: uppercase;
-  }
-
-  .remove-bookmark-button {
-    justify-self: start;
-    border: 0;
-    border-radius: 6px;
-    padding: 0.3rem 0.45rem;
-    color: #52605b;
-    background: transparent;
-    font: inherit;
-    font-size: 0.74rem;
-    font-weight: 850;
-    line-height: 1;
     cursor: pointer;
   }
 
-  .remove-bookmark-button:hover {
-    background: rgba(47, 111, 104, 0.08);
-  }
-
-  .search-results li {
-    min-width: 0;
-  }
-
-  .search-results button {
-    display: grid;
-    gap: 0.18rem;
-    width: 100%;
-    padding: 0.65rem;
-    text-align: left;
-    transition:
-      border-color 150ms ease,
-      background 150ms ease;
-  }
-
-  .search-results button span {
-    color: #182127;
-    font-size: 0.88rem;
-    font-weight: 800;
-    line-height: 1.25;
-  }
-
-  .search-results button small {
-    color: #6b756f;
-    font-size: 0.72rem;
-    font-weight: 800;
-    line-height: 1.25;
-    text-transform: uppercase;
-  }
-
-  .search-results button p {
-    margin: 0;
-    color: #404a45;
-    font-size: 0.82rem;
-    line-height: 1.42;
-    display: -webkit-box;
-    overflow: hidden;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 3;
-    line-clamp: 3;
-    margin-top: 0.15rem;
-  }
-
-  .search-results button:hover,
   .open-highlights-button:hover {
-    background: rgba(47, 111, 104, 0.08);
+    background: linear-gradient(180deg, var(--accent-color-hover), #214f49);
   }
 
   .open-highlights-button:disabled {
@@ -604,7 +271,6 @@
     }
 
     .reader-toolbar,
-    .search-panel,
     .saved-panel {
       gap: 0.75rem;
       align-items: end;
@@ -617,11 +283,6 @@
     .reader-toolbar {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
-
-    .search-results {
-      max-height: min(28vh, 14rem);
-      margin-top: 0.75rem;
-    }
   }
 
   @media (max-width: 500px) {
@@ -631,12 +292,7 @@
     }
 
     .reader-toolbar,
-    .search-panel,
     .saved-panel {
-      grid-template-columns: 1fr;
-    }
-
-    .search-results {
       grid-template-columns: 1fr;
     }
   }
