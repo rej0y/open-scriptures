@@ -805,6 +805,77 @@ test('topical guide words are underlined and open the side page', async (t) => {
     ['Nephi', 'Book of Mormon']
   );
 
+  await clickSelector(
+    harness.client,
+    '.topical-guide-page[data-panel-index="1"] .related-topic-button'
+  );
+  await waitFor(
+    harness.client,
+    async () =>
+      (await evaluate(
+        harness.client,
+        'document.querySelectorAll(".topical-guide-page").length'
+      )) === 3
+  );
+  assert.deepEqual(
+    await evaluate(
+      harness.client,
+      'Array.from(document.querySelectorAll(".topical-guide-page h2"), (heading) => heading.textContent)'
+    ),
+    ['Nephi', 'Book of Mormon', 'Nephi']
+  );
+  assert.equal(
+    await evaluate(
+      harness.client,
+      'document.querySelector(".reader-scroll-viewport").classList.contains("reader-page-hidden")'
+    ),
+    true
+  );
+  assert.notEqual(
+    await evaluate(
+      harness.client,
+      'getComputedStyle(document.querySelector(".topical-guide-page")).transitionDuration'
+    ),
+    '0s'
+  );
+
+  await clickSelector(
+    harness.client,
+    '.topical-guide-page[data-panel-index="2"] .related-topic-button'
+  );
+  await waitFor(
+    harness.client,
+    async () =>
+      (await evaluate(
+        harness.client,
+        'document.querySelectorAll(".topical-guide-page").length'
+      )) === 4
+  );
+  assert.equal(
+    await evaluate(
+      harness.client,
+      'document.querySelectorAll(".topical-guide-page.panel-hidden").length'
+    ),
+    1
+  );
+
+  await clickSelector(harness.client, '.topical-guide-page[data-panel-index="1"] header');
+  await waitFor(
+    harness.client,
+    async () =>
+      (await evaluate(
+        harness.client,
+        'document.querySelectorAll(".topical-guide-page").length'
+      )) === 2
+  );
+  assert.equal(
+    await evaluate(
+      harness.client,
+      'document.querySelector(".reader-scroll-viewport").classList.contains("reader-page-hidden")'
+    ),
+    false
+  );
+
   await clickSelector(harness.client, '.topical-guide-page.primary header');
   await waitFor(
     harness.client,
@@ -817,6 +888,13 @@ test('topical guide words are underlined and open the side page', async (t) => {
   assert.equal(
     await getText(harness.client, '.topical-guide-page h2'),
     'Nephi'
+  );
+  assert.equal(
+    await evaluate(
+      harness.client,
+      'document.querySelector(".reader-scroll-viewport").classList.contains("reader-page-hidden")'
+    ),
+    false
   );
 
   await clickSelector(harness.client, '.chapter-slide:nth-child(2) .chapter-header');

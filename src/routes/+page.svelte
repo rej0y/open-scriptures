@@ -80,13 +80,18 @@
   let topicalGuideError = '';
   let isLoadingTopicalGuide = false;
   let topicalGuideRequest = 0;
-  let relatedTopicTitle = '';
-  let relatedTopicalGuideTopic: TopicalGuideTopic | null = null;
-  let relatedTopicalGuideError = '';
-  let isLoadingRelatedTopicalGuide = false;
-  let relatedTopicalGuideRequest = 0;
+  let nextRelatedTopicPanelKey = 0;
+  let relatedTopicalGuidePanels: Array<{
+    key: number;
+    title: string;
+    topic: TopicalGuideTopic | null;
+    errorMessage: string;
+    isLoading: boolean;
+  }> = [];
   let noteSaveTimer: number | undefined;
   const pendingNoteSaves = new Map<string, ChapterNote[]>();
+
+  $: topicalGuidePanelCount = selectedTopicLink ? 1 + relatedTopicalGuidePanels.length : 0;
 
   const readerState = createReaderStateAdapter({
     books: [() => books, (value) => (books = value)],
@@ -402,15 +407,11 @@
 
   async function openTopicalGuide(topicLink: TopicalGuideLink) {
     const request = ++topicalGuideRequest;
-    relatedTopicalGuideRequest += 1;
     selectedTopicLink = topicLink;
     topicalGuideTopic = null;
     topicalGuideError = '';
     isLoadingTopicalGuide = true;
-    relatedTopicTitle = '';
-    relatedTopicalGuideTopic = null;
-    relatedTopicalGuideError = '';
-    isLoadingRelatedTopicalGuide = false;
+    relatedTopicalGuidePanels = [];
     await recenterCarouselAfterLayoutChange();
 
     if (request !== topicalGuideRequest) return;
@@ -427,50 +428,46 @@
     }
   }
 
-  async function openRelatedTopicalGuide(topicTitle: string) {
-    const request = ++relatedTopicalGuideRequest;
-    relatedTopicTitle = topicTitle;
-    relatedTopicalGuideTopic = null;
-    relatedTopicalGuideError = '';
-    isLoadingRelatedTopicalGuide = true;
+  async function openRelatedTopicalGuide(topicTitle: string, sourcePanelIndex: number) {
+    const key = ++nextRelatedTopicPanelKey;
+    relatedTopicalGuidePanels = [
+      ...relatedTopicalGuidePanels.slice(0, sourcePanelIndex),
+      { key, title: topicTitle, topic: null, errorMessage: '', isLoading: true }
+    ];
     await recenterCarouselAfterLayoutChange();
-
-    if (request !== relatedTopicalGuideRequest) return;
 
     try {
       const topic = await loadTopicalGuideTopicByTitle(topicTitle);
-      if (request === relatedTopicalGuideRequest) relatedTopicalGuideTopic = topic;
+      relatedTopicalGuidePanels = relatedTopicalGuidePanels.map((panel) =>
+        panel.key === key ? { ...panel, topic } : panel
+      );
     } catch (error) {
-      if (request === relatedTopicalGuideRequest) {
-        relatedTopicalGuideError = error instanceof Error ? error.message : String(error);
-      }
+      relatedTopicalGuidePanels = relatedTopicalGuidePanels.map((panel) =>
+        panel.key === key
+          ? { ...panel, errorMessage: error instanceof Error ? error.message : String(error) }
+          : panel
+      );
     } finally {
-      if (request === relatedTopicalGuideRequest) isLoadingRelatedTopicalGuide = false;
+      relatedTopicalGuidePanels = relatedTopicalGuidePanels.map((panel) =>
+        panel.key === key ? { ...panel, isLoading: false } : panel
+      );
     }
   }
 
   function closeTopicalGuide() {
     if (!selectedTopicLink) return;
     topicalGuideRequest += 1;
-    relatedTopicalGuideRequest += 1;
     selectedTopicLink = null;
     topicalGuideTopic = null;
     topicalGuideError = '';
     isLoadingTopicalGuide = false;
-    relatedTopicTitle = '';
-    relatedTopicalGuideTopic = null;
-    relatedTopicalGuideError = '';
-    isLoadingRelatedTopicalGuide = false;
+    relatedTopicalGuidePanels = [];
     void recenterCarouselAfterLayoutChange();
   }
 
-  function closeRelatedTopicalGuide() {
-    if (!relatedTopicTitle) return;
-    relatedTopicalGuideRequest += 1;
-    relatedTopicTitle = '';
-    relatedTopicalGuideTopic = null;
-    relatedTopicalGuideError = '';
-    isLoadingRelatedTopicalGuide = false;
+  function closeTopicalGuidePanelsAfter(panelIndex: number) {
+    if (panelIndex >= topicalGuidePanelCount - 1) return;
+    relatedTopicalGuidePanels = relatedTopicalGuidePanels.slice(0, panelIndex);
     void recenterCarouselAfterLayoutChange();
   }
 
@@ -480,13 +477,9 @@
       return;
     }
 
-    if (
-      relatedTopicTitle &&
-      event.target instanceof Element &&
-      event.target.closest('.topical-guide-page.primary') &&
-      !event.target.closest('.related-topic-button')
-    ) {
-      closeRelatedTopicalGuide();
+    if (event.target instanceof Element && !event.target.closest('.related-topic-button')) {
+      const panel = event.target.closest<HTMLElement>('.topical-guide-page');
+      if (panel) closeTopicalGuidePanelsAfter(Number(panel.dataset.panelIndex));
     }
   }
 
@@ -525,6 +518,7 @@
 <div class="reader-layout">
   <main
     class="reader-shell reader-scroll-viewport"
+    class:reader-page-hidden={topicalGuidePanelCount >= 3}
     on:scroll={updateSelectionOverlay}
   >
     <div
@@ -595,22 +589,28 @@
       topic={topicalGuideTopic}
       isLoading={isLoadingTopicalGuide}
       errorMessage={topicalGuideError}
-      compact={Boolean(relatedTopicTitle)}
+      compact={topicalGuidePanelCount >= 2}
+      threeColumn={topicalGuidePanelCount >= 3}
+      hidden={topicalGuidePanelCount >= 3 && 0 < topicalGuidePanelCount - 3}
+      panelIndex={0}
       primary
-      onOpenRelatedTopic={openRelatedTopicalGuide}
+      onOpenRelatedTopic={(title) => openRelatedTopicalGuide(title, 0)}
     />
   {/if}
 
-  {#if relatedTopicTitle}
+  {#each relatedTopicalGuidePanels as panel, index (panel.key)}
     <TopicalGuidePage
-      title={relatedTopicTitle}
-      topic={relatedTopicalGuideTopic}
-      isLoading={isLoadingRelatedTopicalGuide}
-      errorMessage={relatedTopicalGuideError}
-      compact
-      onOpenRelatedTopic={openRelatedTopicalGuide}
+      title={panel.title}
+      topic={panel.topic}
+      isLoading={panel.isLoading}
+      errorMessage={panel.errorMessage}
+      compact={topicalGuidePanelCount >= 2}
+      threeColumn={topicalGuidePanelCount >= 3}
+      hidden={topicalGuidePanelCount >= 3 && index + 1 < topicalGuidePanelCount - 3}
+      panelIndex={index + 1}
+      onOpenRelatedTopic={(title) => openRelatedTopicalGuide(title, index + 1)}
     />
-  {/if}
+  {/each}
 </div>
 
 {#if selectionOverlayRects.length > 0}
@@ -707,6 +707,21 @@
     padding: 0;
     overflow-x: hidden;
     overflow-y: auto;
+    opacity: 1;
+    transform: translateX(0);
+    transition:
+      flex-basis 260ms ease,
+      width 260ms ease,
+      opacity 180ms ease,
+      transform 260ms ease;
+  }
+
+  .reader-scroll-viewport.reader-page-hidden {
+    flex: 0 0 0;
+    width: 0;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateX(-1.25rem);
   }
 
   .chapter-carousel-viewport {

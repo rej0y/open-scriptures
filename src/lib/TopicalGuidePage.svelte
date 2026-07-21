@@ -6,6 +6,9 @@
   export let isLoading = false;
   export let errorMessage = '';
   export let compact = false;
+  export let threeColumn = false;
+  export let hidden = false;
+  export let panelIndex = 0;
   export let primary = false;
   export let onOpenRelatedTopic = (_title: string) => {};
 
@@ -36,7 +39,7 @@
   }
 
   $: relatedTopics = topic?.related_topics
-    ? splitTopLevelEntries(topic.related_topics.replace(/^See also\s*/i, ''))
+    ? splitTopLevelEntries(topic.related_topics.replace(/^See(?: also)?\s*/i, ''))
     : [];
   $: referenceEntries = topic?.content ? splitTopLevelEntries(topic.content) : [];
 </script>
@@ -44,9 +47,14 @@
 <aside
   class="topical-guide-page"
   class:compact
+  class:three-column={threeColumn}
+  class:panel-hidden={hidden}
   class:primary
+  data-panel-index={panelIndex}
   aria-label={`Topical Guide: ${topic?.title ?? title}`}
+  aria-hidden={hidden}
   aria-live="polite"
+  inert={hidden}
 >
   <header>
     <p class="eyebrow">Topical Guide</p>
@@ -105,11 +113,44 @@
     padding: clamp(1.25rem, 3vw, 2rem);
     color: #1c2a2e;
     background: transparent;
+    animation: topical-guide-enter 260ms ease both;
+    opacity: 1;
+    transform: translateX(0);
+    transition:
+      flex-basis 260ms ease,
+      width 260ms ease,
+      padding 260ms ease,
+      opacity 180ms ease,
+      transform 260ms ease;
   }
 
   .topical-guide-page.compact {
     flex-basis: min(26rem, 32vw);
     width: min(26rem, 32vw);
+  }
+
+  .topical-guide-page.three-column {
+    flex-basis: 33.333333vw;
+    width: 33.333333vw;
+  }
+
+  .topical-guide-page.panel-hidden {
+    flex-basis: 0;
+    width: 0;
+    overflow: hidden;
+    border-left-width: 0;
+    padding-right: 0;
+    padding-left: 0;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateX(-1.25rem);
+  }
+
+  @keyframes topical-guide-enter {
+    from {
+      opacity: 0;
+      transform: translateX(1.25rem);
+    }
   }
 
   header {
@@ -162,12 +203,12 @@
     cursor: pointer;
     font: 400 0.98rem/1.45 Georgia, "Times New Roman", serif;
     text-align: left;
+    text-decoration: underline;
+    text-underline-offset: 0.1em;
   }
 
   .related-topics button:hover {
     color: #000;
-    text-decoration: underline;
-    text-underline-offset: 0.1em;
   }
 
   .related-topics button:focus-visible {
@@ -231,6 +272,13 @@
 
     .related-topics ul {
       grid-template-columns: 1fr;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .topical-guide-page {
+      animation: none;
+      transition: none;
     }
   }
 </style>
