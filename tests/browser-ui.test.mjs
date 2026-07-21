@@ -750,6 +750,17 @@ test('topical guide words are underlined and open the side page', async (t) => {
     0
   );
 
+  await swipeChapter(harness.client, 'next');
+  await delay(250);
+  assert.equal(
+    await getText(harness.client, '.chapter-slide:nth-child(2) h1'),
+    '1 Nephi 1'
+  );
+  assert.equal(
+    await getText(harness.client, '.topical-guide-page h2'),
+    'Nephi'
+  );
+
   await clickSelector(harness.client, '.chapter-slide:nth-child(2) .chapter-header');
   await waitFor(
     harness.client,
@@ -759,6 +770,64 @@ test('topical guide words are underlined and open the side page', async (t) => {
 
   const commands = await getCallCommands(harness.client);
   assert(commands.includes('get_topical_guide_topic'));
+});
+
+test('topical guide keeps notes visible on the main page', async (t) => {
+  const harness = await createHarness();
+  t.after(async () => {
+    await harness.close();
+  });
+
+  await evaluate(
+    harness.client,
+    `(async () => {
+      const chapter = document.querySelector('.chapter-slide:nth-child(2) .chapter-view');
+      const bounds = chapter.getBoundingClientRect();
+      chapter.dispatchEvent(new MouseEvent('dblclick', {
+        bubbles: true,
+        clientX: bounds.right - 40,
+        clientY: bounds.top + 40
+      }));
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      const textarea = document.querySelector('.chapter-note textarea');
+      textarea.value = 'visible note';
+      textarea.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText' }));
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    })()`
+  );
+
+  await clickSelector(
+    harness.client,
+    '.chapter-slide:nth-child(2) .topical-guide-link[data-topic-id="1"]'
+  );
+  await waitFor(
+    harness.client,
+    async () => (await getText(harness.client, '.topical-guide-page h2')) === 'Nephi'
+  );
+
+  const layout = await evaluate(
+    harness.client,
+    `(() => {
+      const main = document.querySelector('.chapter-carousel-viewport').getBoundingClientRect();
+      const noteElement = document.querySelector('.chapter-note');
+      const note = noteElement.getBoundingClientRect();
+      const chapter = noteElement.closest('.chapter-view').getBoundingClientRect();
+      const panel = document.querySelector('.topical-guide-page').getBoundingClientRect();
+      return {
+        mainRight: main.right,
+        noteLeft: note.left,
+        noteRight: note.right,
+        chapterLeft: chapter.left,
+        chapterRight: chapter.right,
+        computedLeft: getComputedStyle(noteElement).left,
+        inlineStyle: noteElement.getAttribute('style'),
+        panelLeft: panel.left
+      };
+    })()`
+  );
+
+  assert(layout.noteRight <= layout.mainRight - 15, JSON.stringify(layout));
+  assert(layout.noteRight <= layout.panelLeft, JSON.stringify(layout));
 });
 
 test('chapter text enters inline editing and persists modified text', async (t) => {

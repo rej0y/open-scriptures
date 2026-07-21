@@ -285,6 +285,14 @@
     }
   }
 
+  async function recenterCarouselAfterLayoutChange() {
+    isCarouselRecentering = true;
+    await tick();
+    centerCarousel();
+    await tick();
+    isCarouselRecentering = false;
+  }
+
   function carouselPageWidth() {
     const carousel = carouselViewport?.querySelector<HTMLElement>('.chapter-carousel');
     return carousel ? carousel.clientWidth / 3 : carouselViewport?.clientWidth ?? 0;
@@ -319,6 +327,11 @@
 
   function completeCarouselScroll() {
     if (!carouselViewport || !chapter) {
+      return;
+    }
+
+    if (selectedTopicLink) {
+      centerCarousel();
       return;
     }
 
@@ -387,6 +400,9 @@
     topicalGuideTopic = null;
     topicalGuideError = '';
     isLoadingTopicalGuide = true;
+    await recenterCarouselAfterLayoutChange();
+
+    if (request !== topicalGuideRequest) return;
 
     try {
       const topic = await loadTopicalGuideTopic(topicLink.topic_id);
@@ -407,6 +423,7 @@
     topicalGuideTopic = null;
     topicalGuideError = '';
     isLoadingTopicalGuide = false;
+    void recenterCarouselAfterLayoutChange();
   }
 
   function closeTopicalGuideFromMainClick(event: MouseEvent) {
@@ -452,6 +469,7 @@
     bind:this={carouselViewport}
     class="reader-shell chapter-carousel-viewport"
     class:carousel-recentering={isCarouselRecentering}
+    class:topical-guide-open={Boolean(selectedTopicLink)}
     style:height={activeChapterSlideHeight ? `${activeChapterSlideHeight}px` : undefined}
     on:scroll={handleCarouselScroll}
   >
@@ -621,6 +639,12 @@
 
   .chapter-carousel-viewport.carousel-recentering {
     scroll-behavior: auto;
+  }
+
+  .chapter-carousel-viewport.topical-guide-open {
+    overflow-x: hidden;
+    overscroll-behavior-x: none;
+    touch-action: pan-y;
   }
 
   .chapter-carousel {

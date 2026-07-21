@@ -976,11 +976,12 @@
     </div>
 
     {#each notes as note (note.id)}
+      {@const noteWidth = note.width ?? minimumNoteWidth}
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
         bind:this={noteElements[note.id]}
         class="chapter-note"
-        style={`left: ${note.x}px; top: ${note.y}px; width: ${note.width ?? minimumNoteWidth}px; height: ${note.height ?? minimumNoteHeight}px;`}
+        style={`left: clamp(${noteInset}px, ${note.x}px, calc(100% - ${noteWidth + noteInset}px)); top: ${note.y}px; width: ${noteWidth}px; height: ${note.height ?? minimumNoteHeight}px;`}
         on:mousedown={(event) => startNoteMouseMove(event, note)}
       >
         <button class="note-handle note-handle-left" type="button" aria-label="Resize note from left" on:pointerdown={(event) => startNoteInteraction(event, note, 'left')}></button>
@@ -990,7 +991,6 @@
           use:fitNoteOnMount={note}
           aria-label="Chapter note"
           value={note.text}
-          on:wheel|preventDefault
           on:input={(event) => updateNoteText(note, event.currentTarget as HTMLTextAreaElement)}
           on:blur={(event) =>
             !(event.currentTarget as HTMLTextAreaElement).value.trim() && onRemoveNotes([note.id])}

@@ -28,12 +28,14 @@ The expected minimum amount of time each Sprint for each category is as follows:
 | Start Time | End Time | Category | Description | Total Time |
 |------------|----------|:--------:|-------------|:----------:|
 | Tue Jul 21 12:43:55 AM | Tue Jul 21 02:12:17 AM | IM | Refined chapter navigation and spacing, then added the clickable Topical Guide database, underlined terms, docked side page, and test coverage. | 1 hr 28 mins |
+| Tue Jul 21 10:54:11 AM | Tue Jul 21 12:38:00 PM | IM | Refined the Topical Guide layout and typography, matched page backgrounds, added click-to-close behavior, and kept chapter notes visible beside the side page. | 1 hr 43 mins |
+| Tue Jul 21 02:00:06 PM | — | IM | Continued Open Scriptures development. | In progress |
 
 ## Sprint Totals
 
 | Category | Total Time (Hours:Minutes) |
 |----------|:--------------------------:|
-| IM - Individual Module | 1:28 |
+| IM - Individual Module | 3:11 |
 | TP - Team Project | 0:00 |
 | MTG - Class Meetings | 0:00 |
-| **TOTAL** | **1:28** |
+| **TOTAL** | **3:11** |
