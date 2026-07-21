@@ -605,6 +605,188 @@ test('browser UI integration', async (t) => {
   });
 });
 
+test('chapter text enters inline editing and persists modified text', async (t) => {
+  const harness = await createHarness();
+  t.after(async () => {
+    await harness.close();
+  });
+
+  await waitFor(harness.client, async () => (await getText(harness.client, 'h1')) === '1 Nephi 1');
+  const editingState = await evaluate(
+    harness.client,
+    `(async () => {
+      const verse = document.querySelector('.chapter-slide:nth-child(2) .verse-text');
+      const bounds = verse.getBoundingClientRect();
+      verse.dispatchEvent(new MouseEvent('dblclick', {
+        bubbles: true,
+        clientX: bounds.left + Math.min(30, bounds.width / 2),
+        clientY: bounds.top + bounds.height / 2
+      }));
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      const editingVerse = document.querySelector('.chapter-slide:nth-child(2) .verse-text');
+      const selection = document.getSelection();
+      return {
+        contentEditable: editingVerse.getAttribute('contenteditable'),
+        hasFocus: document.activeElement === editingVerse,
+        hasCursor: Boolean(selection?.rangeCount && editingVerse.contains(selection.anchorNode))
+      };
+    })()`
+  );
+
+  assert.deepEqual(editingState, {
+    contentEditable: 'true',
+    hasFocus: true,
+    hasCursor: true
+  });
+
+  await harness.client.send('Input.insertText', { text: 'changed ' });
+  await delay(30);
+  const liveTypingState = await evaluate(
+    harness.client,
+    `(() => {
+      const verse = document.querySelector('.chapter-slide:nth-child(2) .verse-text');
+      const selection = document.getSelection();
+      return {
+        text: verse.textContent,
+        hasFocus: document.activeElement === verse,
+        hasCursor: Boolean(selection?.rangeCount && verse.contains(selection.anchorNode)),
+        hasModificationButton: Boolean(
+          document.querySelector('.chapter-slide:nth-child(2) .verse-modification-button')
+        )
+      };
+    })()`
+  );
+
+  assert.match(liveTypingState.text, /changed/);
+  assert.equal(liveTypingState.hasFocus, true);
+  assert.equal(liveTypingState.hasCursor, true);
+  assert.equal(liveTypingState.hasModificationButton, false);
+
+  const savedState = await evaluate(
+    harness.client,
+    `(async () => {
+      const verses = document.querySelectorAll('.chapter-slide:nth-child(2) .verse-text');
+      const verse = verses[0];
+      verse.textContent = 'I changed this chapter text.';
+      verse.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText' }));
+      verse.blur();
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      const saved = JSON.parse(localStorage.getItem('open-scriptures:chapter-text:1 Nephi:1') ?? '{}');
+      const renderedVerses = document.querySelectorAll('.chapter-slide:nth-child(2) .verse-text');
+      const renderedVerse = renderedVerses[0];
+      const modificationButton = document.querySelector(
+        '.chapter-slide:nth-child(2) .verse-modification-button'
+      );
+      const hasResetBeforeOpen = Boolean(
+        document.querySelector('.chapter-slide:nth-child(2) .verse-reset-button')
+      );
+      modificationButton?.click();
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      const modificationPanel = document.querySelector(
+        '.chapter-slide:nth-child(2) .verse-modification-popover'
+      );
+      const verseContentBounds = renderedVerse.closest('.verse-content')?.getBoundingClientRect();
+      const modificationButtonBounds = modificationButton?.getBoundingClientRect();
+      const resetButtonBounds = document.querySelector(
+        '.chapter-slide:nth-child(2) .verse-reset-button'
+      )?.getBoundingClientRect();
+      const modificationPanelBounds = modificationPanel?.getBoundingClientRect();
+      return {
+        text: renderedVerse.textContent,
+        modified: renderedVerse.classList.contains('verse-text-modified'),
+        color: getComputedStyle(renderedVerse).color,
+        originalColor: getComputedStyle(renderedVerses[1]).color,
+        hasModificationButton: Boolean(modificationButton),
+        hasResetBeforeOpen,
+        hasResetAfterOpen: Boolean(
+          document.querySelector('.chapter-slide:nth-child(2) .verse-reset-button')
+        ),
+        modificationRightDelta: verseContentBounds && modificationButtonBounds
+          ? modificationButtonBounds.left - verseContentBounds.right
+          : -1,
+        resetCenterDelta: modificationPanelBounds && resetButtonBounds
+          ? Math.abs(
+              modificationPanelBounds.top + modificationPanelBounds.height / 2 -
+              (resetButtonBounds.top + resetButtonBounds.height / 2)
+            )
+          : 999,
+        buttonBorderStyle: modificationButton
+          ? getComputedStyle(modificationButton).borderStyle
+          : '',
+        panelText: modificationPanel?.textContent ?? '',
+        removedText: Array.from(
+          document.querySelectorAll('.chapter-slide:nth-child(2) .verse-modification-removed')
+        ).map((part) => part.textContent).join(''),
+        addedText: Array.from(
+          document.querySelectorAll('.chapter-slide:nth-child(2) .verse-modification-added')
+        ).map((part) => part.textContent).join(''),
+        savedText: saved['1'] ?? ''
+      };
+    })()`
+  );
+
+  assert.equal(savedState.text, 'I changed this chapter text.');
+  assert.equal(savedState.modified, true, JSON.stringify(savedState));
+  assert.equal(savedState.color, savedState.originalColor);
+  assert.equal(savedState.hasModificationButton, true, JSON.stringify(savedState));
+  assert.equal(savedState.hasResetBeforeOpen, false);
+  assert.equal(savedState.hasResetAfterOpen, true);
+  assert.ok(savedState.modificationRightDelta > 0, JSON.stringify(savedState));
+  assert.ok(savedState.resetCenterDelta < 1, JSON.stringify(savedState));
+  assert.equal(savedState.buttonBorderStyle, 'none');
+  assert.doesNotMatch(savedState.panelText, /Original|Modified/);
+  assert.match(savedState.removedText, /Nephi/);
+  assert.match(savedState.addedText, /changed/, JSON.stringify(savedState));
+  assert.equal(savedState.savedText, 'I changed this chapter text.');
+
+  await harness.client.send('Page.reload');
+  await delay(100);
+  await waitFor(harness.client, async () =>
+    (await getText(
+      harness.client,
+      '.chapter-slide:nth-child(2) .verse-text-modified'
+    )) === 'I changed this chapter text.'
+  );
+
+  const resetState = await evaluate(
+    harness.client,
+    `(async () => {
+      const selector = '.chapter-slide:nth-child(2) .verse-reset-button';
+      document.querySelector(
+        '.chapter-slide:nth-child(2) .verse-modification-button'
+      )?.click();
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      const resetButton = document.querySelector(selector);
+      resetButton?.click();
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      const confirmationLabel = document.querySelector(selector)?.getAttribute('aria-label') ?? '';
+      const remainsModifiedAfterFirstClick = Boolean(
+        document.querySelector('.chapter-slide:nth-child(2) .verse-text-modified')
+      );
+      document.querySelector(selector)?.click();
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      const saved = JSON.parse(localStorage.getItem('open-scriptures:chapter-text:1 Nephi:1') ?? '{}');
+      return {
+        confirmationLabel,
+        remainsModifiedAfterFirstClick,
+        remainsModifiedAfterSecondClick: Boolean(
+          document.querySelector('.chapter-slide:nth-child(2) .verse-text-modified')
+        ),
+        restoredText: document.querySelector(
+          '.chapter-slide:nth-child(2) .verse-text'
+        )?.textContent ?? '',
+        savedText: saved['1'] ?? ''
+      };
+    })()`
+  );
+
+  assert.match(resetState.confirmationLabel, /Confirm restoring original text/);
+  assert.equal(resetState.remainsModifiedAfterFirstClick, true);
+  assert.equal(resetState.remainsModifiedAfterSecondClick, false);
+  assert.match(resetState.restoredText, /Nephi/);
+  assert.equal(resetState.savedText, '');
+});
+
 test('note moves when the second click is held and dragged', async (t) => {
   const harness = await createHarness();
   t.after(async () => {

@@ -39,6 +39,12 @@
   let chapterElement: HTMLElement;
   const noteInputs: Record<string, HTMLTextAreaElement> = {};
   const noteElements: Record<string, HTMLElement> = {};
+  const verseTextElements: Record<number, HTMLElement> = {};
+  let editedVerseTexts: Record<number, string> = {};
+  let editingVerseNumber: number | undefined;
+  let openModificationVerseNumber: number | undefined;
+  let confirmingVerseResetNumber: number | undefined;
+  let loadedChapterEditKey = '';
   let noteSelection:
     | { startX: number; startY: number; left: number; top: number; width: number; height: number }
     | undefined;
@@ -59,6 +65,205 @@
   const minimumNoteWidth = 16;
   const minimumNoteHeight = 28;
   const noteInset = 16;
+
+  $: if (chapter) {
+    const editKey = chapterTextEditKey(chapter);
+    if (editKey !== loadedChapterEditKey) {
+      loadedChapterEditKey = editKey;
+      editedVerseTexts = loadChapterTextEdits(editKey);
+      editingVerseNumber = undefined;
+      openModificationVerseNumber = undefined;
+      confirmingVerseResetNumber = undefined;
+      readerRectCache = undefined;
+    }
+  }
+
+  function chapterTextEditKey(currentChapter: ScriptureChapter) {
+    return `open-scriptures:chapter-text:${currentChapter.book}:${currentChapter.chapter}`;
+  }
+
+  function loadChapterTextEdits(key: string) {
+    if (typeof localStorage === 'undefined') return {};
+
+    try {
+      const savedEdits = localStorage.getItem(key);
+      if (!savedEdits) return {};
+      const parsedEdits = JSON.parse(savedEdits) as Record<string, unknown>;
+      return Object.fromEntries(
+        Object.entries(parsedEdits)
+          .filter(([, text]) => typeof text === 'string')
+          .map(([verseNumber, text]) => [Number(verseNumber), text as string])
+          .filter(([verseNumber]) => Number.isInteger(verseNumber))
+      );
+    } catch {
+      return {};
+    }
+  }
+
+  function saveChapterTextEdits() {
+    if (typeof localStorage === 'undefined' || !loadedChapterEditKey) return;
+
+    if (Object.keys(editedVerseTexts).length === 0) {
+      localStorage.removeItem(loadedChapterEditKey);
+      return;
+    }
+    localStorage.setItem(loadedChapterEditKey, JSON.stringify(editedVerseTexts));
+  }
+
+  function verseText(verse: ChapterVerse) {
+    return editedVerseTexts[verse.number] ?? verse.text;
+  }
+
+  function modifiedTextSegments(originalText: string, updatedText: string) {
+    const tokenize = (text: string) =>
+      text.match(/\s+|[\p{L}\p{N}]+|[^\p{L}\p{N}\s]+/gu) ?? [];
+    const originalTokens = tokenize(originalText);
+    const updatedTokens = tokenize(updatedText);
+    const commonLengths = Array.from(
+      { length: originalTokens.length + 1 },
+      () => new Uint16Array(updatedTokens.length + 1)
+    );
+
+    for (let originalIndex = originalTokens.length - 1; originalIndex >= 0; originalIndex -= 1) {
+      for (let updatedIndex = updatedTokens.length - 1; updatedIndex >= 0; updatedIndex -= 1) {
+        commonLengths[originalIndex][updatedIndex] =
+          originalTokens[originalIndex] === updatedTokens[updatedIndex]
+            ? commonLengths[originalIndex + 1][updatedIndex + 1] + 1
+            : Math.max(
+                commonLengths[originalIndex + 1][updatedIndex],
+                commonLengths[originalIndex][updatedIndex + 1]
+              );
+      }
+    }
+
+    const segments: Array<{ text: string; kind: 'unchanged' | 'removed' | 'added' }> = [];
+    const append = (text: string, kind: 'unchanged' | 'removed' | 'added') => {
+      const previous = segments.at(-1);
+      if (previous?.kind === kind) {
+        previous.text += text;
+      } else {
+        segments.push({ text, kind });
+      }
+    };
+    let originalIndex = 0;
+    let updatedIndex = 0;
+
+    while (originalIndex < originalTokens.length || updatedIndex < updatedTokens.length) {
+      if (
+        originalIndex < originalTokens.length &&
+        updatedIndex < updatedTokens.length &&
+        originalTokens[originalIndex] === updatedTokens[updatedIndex]
+      ) {
+        append(updatedTokens[updatedIndex], 'unchanged');
+        originalIndex += 1;
+        updatedIndex += 1;
+      } else if (
+        originalIndex < originalTokens.length &&
+        (updatedIndex >= updatedTokens.length ||
+          commonLengths[originalIndex + 1][updatedIndex] >=
+            commonLengths[originalIndex][updatedIndex + 1])
+      ) {
+        append(originalTokens[originalIndex], 'removed');
+        originalIndex += 1;
+      } else {
+        append(updatedTokens[updatedIndex], 'added');
+        updatedIndex += 1;
+      }
+    }
+
+    return segments;
+  }
+
+  async function startVerseEdit(event: MouseEvent, verse: ChapterVerse) {
+    if (event.target instanceof Element && event.target.closest('.highlight-mark')) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    editingVerseNumber = verse.number;
+    openModificationVerseNumber = undefined;
+    confirmingVerseResetNumber = undefined;
+    readerRectCache = undefined;
+    await tick();
+
+    const verseElement = verseTextElements[verse.number];
+    if (!verseElement) return;
+    verseElement.focus({ preventScroll: true });
+
+    const selection = document.getSelection();
+    const range = document.createRange();
+    const caretPosition = document.caretPositionFromPoint?.(event.clientX, event.clientY);
+    const legacyCaretRange = (document as Document & {
+      caretRangeFromPoint?: (x: number, y: number) => Range | null;
+    }).caretRangeFromPoint?.(event.clientX, event.clientY);
+
+    if (caretPosition && verseElement.contains(caretPosition.offsetNode)) {
+      range.setStart(caretPosition.offsetNode, caretPosition.offset);
+    } else if (legacyCaretRange && verseElement.contains(legacyCaretRange.startContainer)) {
+      range.setStart(legacyCaretRange.startContainer, legacyCaretRange.startOffset);
+    } else {
+      range.selectNodeContents(verseElement);
+      range.collapse(false);
+    }
+    range.collapse(true);
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+  }
+
+  function finishVerseEdit(verse: ChapterVerse, element: HTMLElement) {
+    if (editingVerseNumber !== verse.number) return;
+
+    const updatedText = (element.textContent ?? '').replace(/\s+/g, ' ').trim() || verse.text;
+    const nextEdits = { ...editedVerseTexts };
+    if (updatedText === verse.text) {
+      delete nextEdits[verse.number];
+    } else {
+      nextEdits[verse.number] = updatedText;
+    }
+
+    editedVerseTexts = nextEdits;
+    editingVerseNumber = undefined;
+    openModificationVerseNumber = undefined;
+    confirmingVerseResetNumber = undefined;
+    readerRectCache = undefined;
+    saveChapterTextEdits();
+  }
+
+  function toggleVerseModification(verseNumber: number) {
+    confirmingVerseResetNumber = undefined;
+    openModificationVerseNumber =
+      openModificationVerseNumber === verseNumber ? undefined : verseNumber;
+  }
+
+  function requestVerseReset(verseNumber: number) {
+    if (confirmingVerseResetNumber !== verseNumber) {
+      confirmingVerseResetNumber = verseNumber;
+      return;
+    }
+
+    const nextEdits = { ...editedVerseTexts };
+    delete nextEdits[verseNumber];
+    editedVerseTexts = nextEdits;
+    confirmingVerseResetNumber = undefined;
+    readerRectCache = undefined;
+    saveChapterTextEdits();
+  }
+
+  function handleVerseEditKeydown(event: KeyboardEvent, verse: ChapterVerse) {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      (event.currentTarget as HTMLElement).blur();
+      return;
+    }
+
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      const element = event.currentTarget as HTMLElement;
+      editingVerseNumber = undefined;
+      element.textContent = verseText(verse);
+      readerRectCache = undefined;
+      element.blur();
+    }
+  }
 
   function clampNotePosition(x: number, y: number, width: number) {
     return {
@@ -361,7 +566,7 @@
   function isReaderTextTarget(target: EventTarget | null) {
     return (
       target instanceof Element &&
-      Boolean(target.closest('button, textarea, input, .highlight-mark, .chapter-note'))
+      Boolean(target.closest('button, textarea, input, [contenteditable="true"], .highlight-mark, .chapter-note'))
     );
   }
 
@@ -381,6 +586,14 @@
   }
 
   function startNoteSelection(event: PointerEvent) {
+    if (
+      document.activeElement instanceof HTMLElement &&
+      document.activeElement.matches('[contenteditable="true"]') &&
+      document.activeElement !== event.target
+    ) {
+      document.activeElement.blur();
+    }
+
     if (
       document.activeElement instanceof HTMLTextAreaElement &&
       document.activeElement !== event.target
@@ -661,31 +874,83 @@
     <div class="verses" aria-label={`${chapter.reference} verses`}>
       {#each chapter.verses as verse}
         {@const verseKey = `${chapter.book}:${chapter.chapter}:${verse.number}`}
+        {@const isVerseModified = Object.prototype.hasOwnProperty.call(editedVerseTexts, verse.number)}
         <div class="verse-row">
           <p>
-            <span class="verse-number">{verse.number}</span>
-            <span class="verse-text" data-verse-key={verseKey}>
-              {#each verseSegments(verse) as segment}
-                {#if segment.savedWord}
-                  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-                  <mark
-                    class="highlight-mark"
-                    class:highlight-mark-active={activeHighlightId === highlightId(segment.savedWord)}
-                    title="Double-click to remove highlight"
-                    data-highlight-key={highlightKey(segment.savedWord)}
-                    data-highlight-id={highlightId(segment.savedWord)}
-                    on:pointerup|stopPropagation
-                    on:mouseup|stopPropagation
-                    on:touchend|stopPropagation
-                    on:dblclick|preventDefault|stopPropagation={() => onRemoveHighlight(segment.savedWord!)}
-                  >
-                    {segment.text}
-                  </mark>
-                {:else}
-                  {segment.text}
-                {/if}
-              {/each}
+            <span class="verse-main">
+              <span class="verse-content">
+                <span class="verse-number">{verse.number}</span>
+                {#key `${verseKey}:${editingVerseNumber === verse.number ? 'editing' : 'reading'}:${verseText(verse)}`}
+                <span
+              bind:this={verseTextElements[verse.number]}
+              class="verse-text"
+              class:verse-text-modified={isVerseModified}
+              class:verse-text-editing={editingVerseNumber === verse.number}
+              data-verse-key={verseKey}
+              contenteditable={editingVerseNumber === verse.number}
+              role="textbox"
+              tabindex="-1"
+              aria-label={`Edit ${chapter.reference} verse ${verse.number}`}
+              aria-multiline="false"
+              spellcheck="true"
+              title="Double-click to edit verse text"
+              on:dblclick={(event) => startVerseEdit(event, verse)}
+              on:blur={(event) => finishVerseEdit(verse, event.currentTarget)}
+              on:keydown={(event) => handleVerseEditKeydown(event, verse)}
+                >{#if editingVerseNumber === verse.number || isVerseModified}{verseText(verse)}{:else}{#each verseSegments(verse) as segment}{#if segment.savedWord}
+                    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+                    <mark
+                      class="highlight-mark"
+                      class:highlight-mark-active={activeHighlightId === highlightId(segment.savedWord)}
+                      title="Double-click to remove highlight"
+                      data-highlight-key={highlightKey(segment.savedWord)}
+                      data-highlight-id={highlightId(segment.savedWord)}
+                      on:pointerup|stopPropagation
+                      on:mouseup|stopPropagation
+                      on:touchend|stopPropagation
+                      on:dblclick|preventDefault|stopPropagation={() => onRemoveHighlight(segment.savedWord!)}
+                    >{segment.text}</mark>
+                  {:else}{segment.text}{/if}{/each}{/if}</span>
+                {/key}
+              </span>
+              {#if isVerseModified}
+                <button
+                  class="verse-modification-button"
+                  type="button"
+                  aria-label={`View modifications to ${chapter.reference} verse ${verse.number}`}
+                  aria-expanded={openModificationVerseNumber === verse.number}
+                  title="View modification"
+                  on:click|stopPropagation={() => toggleVerseModification(verse.number)}
+                >M</button>
+              {/if}
             </span>
+            {#if isVerseModified && openModificationVerseNumber === verse.number}
+              <span
+                class="verse-modification-popover"
+                role="dialog"
+                aria-label={`Modifications to ${chapter.reference} verse ${verse.number}`}
+              >
+                  {#each modifiedTextSegments(verse.text, verseText(verse)) as segment}
+                    {#if segment.kind === 'removed'}
+                      <del class="verse-modification-removed">{segment.text}</del>
+                    {:else if segment.kind === 'added'}
+                      <ins class="verse-modification-added">{segment.text}</ins>
+                    {:else}{segment.text}{/if}
+                  {/each}
+                  <button
+                    class="verse-reset-button"
+                    class:verse-reset-button-confirming={confirmingVerseResetNumber === verse.number}
+                    type="button"
+                    aria-label={confirmingVerseResetNumber === verse.number
+                      ? `Confirm restoring original text for ${chapter.reference} verse ${verse.number}`
+                      : `Restore original text for ${chapter.reference} verse ${verse.number}`}
+                    title={confirmingVerseResetNumber === verse.number
+                      ? 'Click again to restore the original text'
+                      : 'Restore original text'}
+                    on:click|stopPropagation={() => requestVerseReset(verse.number)}
+                  >×</button>
+              </span>
+            {/if}
           </p>
         </div>
       {/each}
@@ -838,6 +1103,7 @@
   }
 
   .verse-row {
+    position: relative;
     min-width: 0;
     padding: 0.25rem 0 0.25rem 0.75rem;
     border-left: 3px solid transparent;
@@ -885,6 +1151,126 @@
 
   .verse-text {
     display: inline;
+    min-width: 0.5ch;
+    border-radius: 3px;
+    cursor: text;
+  }
+
+  .verse-text-editing {
+    caret-color: currentColor;
+    outline: none;
+  }
+
+  .verse-main {
+    display: inline-grid;
+    grid-template-columns: minmax(0, auto) auto;
+    gap: 0.3rem;
+    align-items: first baseline;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .verse-content {
+    display: block;
+    min-width: 0;
+  }
+
+  .verse-modification-button,
+  .verse-reset-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.55rem;
+    height: 100%;
+    border: 0;
+    border-radius: 0;
+    padding: 0.1rem;
+    color: var(--panel-muted-color);
+    background: transparent;
+    font: 800 0.72rem/1 ui-sans-serif, system-ui, sans-serif;
+    letter-spacing: 0;
+    cursor: pointer;
+    transition: color 140ms ease, background 140ms ease;
+  }
+
+  .verse-modification-button {
+    position: static;
+    display: inline-block;
+    height: auto;
+    width: auto;
+    padding: 0.45rem 0.15rem;
+    align-self: first baseline;
+    font-size: 0.62em;
+    font-weight: 700;
+    transform: translateY(-0.09rem);
+  }
+
+  .verse-modification-button:hover,
+  .verse-modification-button[aria-expanded='true'] {
+    color: var(--panel-text-color);
+    background: transparent;
+  }
+
+  .verse-modification-button:focus-visible {
+    outline: 2px solid var(--accent-color);
+    outline-offset: 2px;
+  }
+
+  .verse-reset-button {
+    position: absolute;
+    top: 50%;
+    right: 0.42rem;
+    height: 1.55rem;
+    transform: translateY(-50%);
+    border-radius: 4px;
+    color: var(--panel-muted-color);
+    font-size: 1.05rem;
+    font-weight: 500;
+  }
+
+  .verse-reset-button:hover {
+    color: #8d3e3e;
+    background: rgba(163, 74, 74, 0.08);
+  }
+
+  .verse-reset-button-confirming {
+    color: #8d3e3e;
+    background: rgba(163, 74, 74, 0.14);
+    font-weight: 800;
+  }
+
+  .verse-reset-button:focus-visible {
+    outline: 2px solid #a34a4a;
+    outline-offset: 2px;
+  }
+
+  .verse-modification-popover {
+    position: relative;
+    display: block;
+    margin: 0.65rem 0 0 2.1rem;
+    border-left: 2px solid rgba(57, 116, 92, 0.42);
+    border-radius: 0 6px 6px 0;
+    padding: 0.65rem 2.45rem 0.65rem 0.85rem;
+    color: var(--panel-text-color);
+    background: rgba(244, 247, 245, 0.9);
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 0.96em;
+    line-height: 1.65;
+  }
+
+  .verse-modification-removed {
+    color: #a34a4a;
+    text-decoration-color: currentColor;
+    opacity: 0.78;
+  }
+
+  .verse-modification-added {
+    border-radius: 2px;
+    padding: 0 0.08em;
+    color: #28664e;
+    background: rgba(57, 116, 92, 0.12);
+    font-weight: 700;
+    text-decoration: none;
   }
 
   .empty-state,
