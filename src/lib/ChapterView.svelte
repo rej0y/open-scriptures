@@ -33,8 +33,6 @@
     _layout: NoteLayout
   ) => {};
   export let onRemoveNotes = (_ids: string[]) => {};
-  export let onPreviousChapter = () => {};
-  export let onNextChapter = () => {};
 
   let chapterElement: HTMLElement;
   const noteInputs: Record<string, HTMLTextAreaElement> = {};
@@ -283,7 +281,7 @@
 
     const chapterBounds = chapterElement.getBoundingClientRect();
     const rects = Array.from(
-      chapterElement.querySelectorAll<HTMLElement>('.chapter-header, .verse-text, .chapter-footer')
+      chapterElement.querySelectorAll<HTMLElement>('.chapter-header, .verse-text')
     ).flatMap((element) => {
       const textNodes: Text[] = [];
       const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
@@ -956,27 +954,6 @@
       {/each}
     </div>
 
-    <footer class="chapter-footer">
-      <nav class="chapter-nav" aria-label="Chapter navigation">
-        <button
-          type="button"
-          aria-label="Previous chapter"
-          disabled={chapter.previous_chapter === null || isLoading}
-          on:click={onPreviousChapter}
-        >
-          <span aria-hidden="true">&larr;</span>
-        </button>
-        <button
-          type="button"
-          aria-label="Next chapter"
-          disabled={chapter.next_chapter === null || isLoading}
-          on:click={onNextChapter}
-        >
-          <span aria-hidden="true">&rarr;</span>
-        </button>
-      </nav>
-    </footer>
-
     {#each notes as note (note.id)}
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
@@ -1018,7 +995,6 @@
     max-width: 100%;
     overflow: visible;
     position: relative;
-    min-height: calc(100vh - clamp(2rem, 8vw, 5rem));
     padding: clamp(1.4rem, 4vw, 3.5rem);
     border: 1px solid var(--panel-border-color);
     border-radius: 8px;
@@ -1290,13 +1266,6 @@
     padding: 1.3rem 0;
   }
 
-  .chapter-footer {
-    max-width: 760px;
-    margin: clamp(2.25rem, 5vw, 3.5rem) auto 0;
-    padding-top: 1.15rem;
-    border-top: 1px solid var(--panel-border-color);
-  }
-
   .chapter-note {
     position: absolute;
     z-index: 2;
@@ -1366,72 +1335,12 @@
     pointer-events: none;
   }
 
-  .chapter-nav {
-    display: flex;
-    gap: 0.75rem;
-    justify-content: space-between;
-  }
-
-  .chapter-nav button {
-    display: inline-flex;
-    gap: 0.5rem;
-    align-items: center;
-    justify-content: center;
-    width: 2.85rem;
-    height: 2.85rem;
-    border: 1px solid var(--control-border-color);
-    border-radius: 8px;
-    color: var(--panel-text-color);
-    background: var(--control-surface);
-    font: inherit;
-    font-size: 1.25rem;
-    font-weight: 800;
-    line-height: 1;
-    cursor: pointer;
-    transition:
-      border-color 150ms ease,
-      background 150ms ease,
-      transform 150ms ease;
-  }
-
-  .chapter-nav button:focus-visible {
-    outline: 3px solid var(--accent-color-muted);
-    outline-offset: 2px;
-  }
-
-  .chapter-nav button:not(:disabled):hover {
-    border-color: var(--accent-color);
-    background: var(--accent-color-muted);
-    transform: translateY(-1px);
-  }
-
-  .chapter-nav button:disabled {
-    cursor: default;
-    opacity: 0.35;
-  }
-
-  .chapter-nav span {
-    font-size: 1.2rem;
-    line-height: 0;
-  }
-
   @media (max-width: 900px) {
     .chapter-view {
-      min-height: 100vh;
       border-width: 0;
       border-radius: 0;
       box-shadow: none;
     }
   }
 
-  @media (max-width: 500px) {
-    .chapter-nav {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-    }
-
-    .chapter-nav button {
-      width: 100%;
-    }
-  }
 </style>

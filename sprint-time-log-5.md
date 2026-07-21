@@ -27,6 +27,7 @@ The expected minimum amount of time each Sprint for each category is as follows:
 
 | Start Time | End Time | Category | Description | Total Time |
 |------------|----------|:--------:|-------------|:----------:|
+| Tue Jul 21 12:43:55 AM | — | IM | Open Scriptures development. | — |
 
 ## Sprint Totals
 

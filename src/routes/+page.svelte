@@ -69,6 +69,7 @@
   let carouselViewport: HTMLElement;
   let carouselSettleTimer: number | undefined;
   let hasCenteredCarousel = false;
+  let activeChapterSlideHeight: number | undefined;
   let noteSaveTimer: number | undefined;
   const pendingNoteSaves = new Map<string, ChapterNote[]>();
 
@@ -280,6 +281,22 @@
     return carousel ? carousel.clientWidth / 3 : carouselViewport?.clientWidth ?? 0;
   }
 
+  function measureActiveChapterSlide(node: HTMLElement) {
+    const updateHeight = () => {
+      activeChapterSlideHeight = node.offsetHeight;
+    };
+    const observer = new ResizeObserver(updateHeight);
+
+    observer.observe(node);
+    updateHeight();
+
+    return {
+      destroy() {
+        observer.disconnect();
+      }
+    };
+  }
+
   function handleCarouselScroll() {
     if (isCarouselRecentering) {
       return;
@@ -388,6 +405,7 @@
   bind:this={carouselViewport}
   class="reader-shell chapter-carousel-viewport"
   class:carousel-recentering={isCarouselRecentering}
+  style:height={activeChapterSlideHeight ? `${activeChapterSlideHeight}px` : undefined}
   on:scroll={handleCarouselScroll}
 >
   <div class="chapter-carousel">
@@ -401,15 +419,11 @@
           {highlightId}
           {highlightKey}
           onRemoveHighlight={removeHighlightOnDoubleClick}
-          onPreviousChapter={() =>
-            previousChapterPreview?.previous_chapter &&
-            openChapter(previousChapterPreview.book, previousChapterPreview.previous_chapter)}
-          onNextChapter={() => openChapter(previousChapterPreview!.book, previousChapterPreview!.chapter)}
         />
       {/if}
     </div>
 
-    <div class="chapter-slide">
+    <div class="chapter-slide" use:measureActiveChapterSlide>
       <ChapterView
         bind:activeHighlightId
         {chapter}
@@ -425,8 +439,6 @@
         onUpdateNote={updateChapterNote}
         onUpdateNoteLayout={updateChapterNoteLayout}
         onRemoveNotes={removeChapterNotes}
-        onPreviousChapter={() => chapter?.previous_chapter && openChapter(chapter.book, chapter.previous_chapter)}
-        onNextChapter={() => chapter?.next_chapter && openChapter(chapter.book, chapter.next_chapter)}
       />
     </div>
 
@@ -439,10 +451,7 @@
           verseSegments={(verse) => verseSegmentsForChapter(nextChapterPreview, verse, savedWordsByVerse)}
           {highlightId}
           {highlightKey}
-        onRemoveHighlight={removeHighlightOnDoubleClick}
-          onPreviousChapter={() => openChapter(nextChapterPreview!.book, nextChapterPreview!.chapter)}
-          onNextChapter={() =>
-            nextChapterPreview?.next_chapter && openChapter(nextChapterPreview.book, nextChapterPreview.next_chapter)}
+          onRemoveHighlight={removeHighlightOnDoubleClick}
         />
       {/if}
     </div>
@@ -480,7 +489,6 @@
     width: 100%;
     max-width: 100%;
     min-width: 320px;
-    min-height: 100vh;
     overflow-x: clip;
     color: #1d252d;
     background:
@@ -529,6 +537,7 @@
   .chapter-carousel-viewport {
     padding: 0;
     overflow-x: auto;
+    overflow-y: clip;
     overscroll-behavior-x: contain;
     scroll-behavior: smooth;
     scroll-snap-type: x mandatory;
@@ -545,6 +554,7 @@
 
   .chapter-carousel {
     display: flex;
+    align-items: flex-start;
     width: 300%;
   }
 
@@ -556,7 +566,6 @@
   }
 
   .chapter-carousel :global(.chapter-view) {
-    min-height: 100dvh;
     border: 0;
     border-radius: 0;
     box-shadow: none;

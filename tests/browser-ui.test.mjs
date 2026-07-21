@@ -484,6 +484,21 @@ async function setInputValue(client, selector, value) {
   );
 }
 
+async function swipeChapter(client, direction) {
+  return await evaluate(
+    client,
+    `(async () => {
+      const viewport = document.querySelector('.chapter-carousel-viewport');
+      const carousel = document.querySelector('.chapter-carousel');
+      if (!viewport || !carousel) throw new Error('Missing chapter carousel.');
+      const pageWidth = carousel.clientWidth / 3;
+      viewport.scrollTo({ left: ${direction === 'next' ? 'pageWidth * 2' : '0'}, behavior: 'instant' });
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      return viewport.scrollLeft;
+    })()`
+  );
+}
+
 async function typeIntoInput(client, selector, value) {
   await evaluate(
     client,
@@ -553,17 +568,26 @@ test('browser UI integration', async (t) => {
     assert.equal(await getText(harness.client, 'h1'), '1 Nephi 1');
   });
 
-  await t.test('chapter navigation buttons load adjacent chapters', async (t) => {
+  await t.test('swiping loads adjacent chapters without arrow buttons', async (t) => {
     const harness = await createHarness();
     t.after(async () => {
       await harness.close();
     });
 
-    await clickSelector(harness.client, '.chapter-nav button[aria-label="Next chapter"]');
-    await waitFor(harness.client, async () => (await getText(harness.client, 'h1')) === '1 Nephi 2');
+    assert.equal(
+      await evaluate(harness.client, 'document.querySelectorAll(".chapter-nav").length'),
+      0
+    );
 
-    await clickSelector(harness.client, '.chapter-nav button[aria-label="Previous chapter"]');
-    await waitFor(harness.client, async () => (await getText(harness.client, 'h1')) === '1 Nephi 1');
+    await swipeChapter(harness.client, 'next');
+    await waitFor(harness.client, async () =>
+      (await getText(harness.client, '.chapter-slide:nth-child(2) h1')) === '1 Nephi 2'
+    );
+
+    await swipeChapter(harness.client, 'previous');
+    await waitFor(harness.client, async () =>
+      (await getText(harness.client, '.chapter-slide:nth-child(2) h1')) === '1 Nephi 1'
+    );
 
     const commands = await getCallCommands(harness.client);
     assert(commands.filter((command) => command === 'get_chapter').length >= 3);
@@ -575,8 +599,10 @@ test('browser UI integration', async (t) => {
       await harness.close();
     });
 
-    await clickSelector(harness.client, '.chapter-nav button[aria-label="Next chapter"]');
-    await waitFor(harness.client, async () => (await getText(harness.client, 'h1')) === '1 Nephi 2');
+    await swipeChapter(harness.client, 'next');
+    await waitFor(harness.client, async () =>
+      (await getText(harness.client, '.chapter-slide:nth-child(2) h1')) === '1 Nephi 2'
+    );
 
     await typeIntoInput(harness.client, '.bookmark-form input[type="text"]', 'Lehi leaves');
     await clickSelector(harness.client, '.bookmark-form button[type="submit"]');
@@ -585,8 +611,10 @@ test('browser UI integration', async (t) => {
       (await getText(harness.client, '.bookmark-list .bookmark-link span')) === 'Lehi leaves'
     );
 
-    await clickSelector(harness.client, '.chapter-nav button[aria-label="Previous chapter"]');
-    await waitFor(harness.client, async () => (await getText(harness.client, 'h1')) === '1 Nephi 1');
+    await swipeChapter(harness.client, 'previous');
+    await waitFor(harness.client, async () =>
+      (await getText(harness.client, '.chapter-slide:nth-child(2) h1')) === '1 Nephi 1'
+    );
 
     await clickSelector(harness.client, '.bookmark-list .bookmark-link');
     await waitFor(harness.client, async () => (await getText(harness.client, 'h1')) === '1 Nephi 2');
@@ -603,6 +631,33 @@ test('browser UI integration', async (t) => {
     assert(commands.includes('save_bookmark'));
     assert(commands.includes('remove_bookmark'));
   });
+});
+
+test('carousel height follows the visible chapter', async (t) => {
+  const harness = await createHarness();
+  t.after(async () => {
+    await harness.close();
+  });
+
+  await waitFor(
+    harness.client,
+    async () => (await getText(harness.client, '.chapter-slide:nth-child(3) h1')) === '1 Nephi 2'
+  );
+  await swipeChapter(harness.client, 'next');
+  await waitFor(harness.client, async () =>
+    (await getText(harness.client, '.chapter-slide:nth-child(2) h1')) === '1 Nephi 2'
+  );
+
+  const dimensions = await evaluate(
+    harness.client,
+    `(() => {
+      const viewport = document.querySelector('.chapter-carousel-viewport').getBoundingClientRect();
+      const chapter = document.querySelector('.chapter-slide:nth-child(2) .chapter-view').getBoundingClientRect();
+      return { viewportHeight: viewport.height, chapterHeight: chapter.height };
+    })()`
+  );
+
+  assert(Math.abs(dimensions.viewportHeight - dimensions.chapterHeight) < 1, JSON.stringify(dimensions));
 });
 
 test('chapter text enters inline editing and persists modified text', async (t) => {
