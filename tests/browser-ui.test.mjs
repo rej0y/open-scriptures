@@ -325,7 +325,8 @@ function buildMockInvokeSource() {
               id: Number(args.topicId),
               title: 'Nephi',
               related_topics: 'See also Book of Mormon; Prophets',
-              content: '1 Ne. 1:1 I, Nephi, having been born of goodly parents.',
+              content:
+                '1 Ne. 1:1 I, Nephi,\\nhaving been born of goodly parents; 1 Ne. 1:2 Yea, I make a record.',
               source_page: 321
             };
           case 'search_scriptures': {
@@ -689,9 +690,12 @@ test('topical guide words are underlined and open the side page', async (t) => {
   assert.equal(
     await evaluate(
       harness.client,
-      `getComputedStyle(document.querySelector(${JSON.stringify(topicSelector)})).textDecorationColor`
+      `(() => {
+        const style = getComputedStyle(document.querySelector(${JSON.stringify(topicSelector)}));
+        return style.textDecorationColor === style.color;
+      })()`
     ),
-    'rgb(0, 0, 0)'
+    true
   );
 
   await clickSelector(harness.client, topicSelector);
@@ -700,6 +704,32 @@ test('topical guide words are underlined and open the side page', async (t) => {
     async () => (await getText(harness.client, '.topical-guide-page h2')) === 'Nephi'
   );
   assert.match(await getText(harness.client, '.topical-guide-page .topic-content'), /1 Ne\. 1:1/);
+  assert.equal(
+    await evaluate(
+      harness.client,
+      'document.querySelectorAll(".topical-guide-page .related-topics li").length'
+    ),
+    2
+  );
+  assert.equal(
+    await getText(harness.client, '.topical-guide-page .related-topics h3'),
+    'See also'
+  );
+  assert.equal(
+    await getText(harness.client, '.topical-guide-page .topic-content h3'),
+    'Scripture references'
+  );
+  assert.equal(
+    await evaluate(
+      harness.client,
+      'document.querySelectorAll(".topical-guide-page .reference-list p").length'
+    ),
+    2
+  );
+  assert.match(
+    await getText(harness.client, '.topical-guide-page .reference-list p'),
+    /Nephi, having been born/
+  );
 
   const paneLayout = await evaluate(
     harness.client,
@@ -718,6 +748,13 @@ test('topical guide words are underlined and open the side page', async (t) => {
   assert.equal(
     await evaluate(harness.client, 'document.querySelectorAll(".topical-guide-page .close-button").length'),
     0
+  );
+
+  await clickSelector(harness.client, '.chapter-slide:nth-child(2) .chapter-header');
+  await waitFor(
+    harness.client,
+    async () =>
+      (await evaluate(harness.client, 'document.querySelector(".topical-guide-page") === null')) === true
   );
 
   const commands = await getCallCommands(harness.client);

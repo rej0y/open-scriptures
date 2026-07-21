@@ -5,6 +5,37 @@
   export let topic: TopicalGuideTopic | null = null;
   export let isLoading = false;
   export let errorMessage = '';
+
+  function splitTopLevelEntries(value: string) {
+    const entries: string[] = [];
+    let entry = '';
+    let parenthesisDepth = 0;
+
+    function appendEntry() {
+      const normalizedEntry = entry.replace(/\s+/g, ' ').trim();
+      if (normalizedEntry) entries.push(normalizedEntry);
+      entry = '';
+    }
+
+    for (const character of value) {
+      if (character === '(') parenthesisDepth += 1;
+      if (character === ')') parenthesisDepth = Math.max(0, parenthesisDepth - 1);
+
+      if (character === ';' && parenthesisDepth === 0) {
+        appendEntry();
+      } else {
+        entry += character;
+      }
+    }
+
+    appendEntry();
+    return entries;
+  }
+
+  $: relatedTopics = topic?.related_topics
+    ? splitTopLevelEntries(topic.related_topics.replace(/^See also\s*/i, ''))
+    : [];
+  $: referenceEntries = topic?.content ? splitTopLevelEntries(topic.content) : [];
 </script>
 
 <aside class="topical-guide-page" aria-label="Topical Guide" aria-live="polite">
@@ -18,11 +49,25 @@
   {:else if errorMessage}
     <p class="status error" role="alert">{errorMessage}</p>
   {:else if topic}
-    {#if topic.related_topics}
-      <p class="related-topics">{topic.related_topics}</p>
+    {#if relatedTopics.length > 0}
+      <section class="related-topics" aria-labelledby="related-topics-title">
+        <h3 id="related-topics-title">See also</h3>
+        <ul>
+          {#each relatedTopics as relatedTopic}
+            <li>{relatedTopic}</li>
+          {/each}
+        </ul>
+      </section>
     {/if}
-    {#if topic.content}
-      <p class="topic-content">{topic.content}</p>
+    {#if referenceEntries.length > 0}
+      <section class="topic-content" aria-labelledby="references-title">
+        <h3 id="references-title">Scripture references</h3>
+        <div class="reference-list">
+          {#each referenceEntries as referenceEntry}
+            <p>{referenceEntry}</p>
+          {/each}
+        </div>
+      </section>
     {:else}
       <p class="status">This entry points to the related study resources above.</p>
     {/if}
@@ -42,7 +87,7 @@
     border-left: 1px solid rgba(52, 79, 72, 0.2);
     padding: clamp(1.25rem, 3vw, 2rem);
     color: #1c2a2e;
-    background: #fbfdfc;
+    background: transparent;
   }
 
   header {
@@ -65,19 +110,55 @@
   }
 
   .related-topics {
-    margin: 0 0 1.25rem;
-    border-radius: 6px;
-    padding: 0.8rem 0.9rem;
-    color: #425b55;
-    background: rgba(47, 118, 109, 0.08);
-    font: 600 0.94rem/1.55 Inter, ui-sans-serif, system-ui, sans-serif;
+    margin: 0 0 1.75rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid rgba(52, 79, 72, 0.14);
+  }
+
+  h3 {
+    margin: 0 0 0.75rem;
+    color: #2f766d;
+    font: 800 0.72rem/1.2 Inter, ui-sans-serif, system-ui, sans-serif;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .related-topics ul {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.45rem 1rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .related-topics li {
+    color: #24332f;
+    font: 400 0.98rem/1.45 Georgia, "Times New Roman", serif;
   }
 
   .topic-content {
     margin: 0;
+  }
+
+  .reference-list {
     color: #24332f;
-    font: 400 1rem/1.68 Georgia, "Times New Roman", serif;
-    white-space: pre-line;
+    font: 400 1rem/1.62 Georgia, "Times New Roman", serif;
+  }
+
+  .reference-list p {
+    margin: 0;
+    padding: 0.72rem 0;
+    border-bottom: 1px solid rgba(52, 79, 72, 0.1);
+  }
+
+  .reference-list p:first-child {
+    padding-top: 0;
+  }
+
+  .reference-list p:last-child {
+    padding-bottom: 0;
+    border-bottom: 0;
   }
 
   .status {
@@ -107,6 +188,10 @@
 
     h2 {
       font-size: 1.45rem;
+    }
+
+    .related-topics ul {
+      grid-template-columns: 1fr;
     }
   }
 </style>

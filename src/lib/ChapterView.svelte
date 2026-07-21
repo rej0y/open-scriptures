@@ -1019,7 +1019,7 @@
     padding: clamp(1.4rem, 4vw, 3.5rem);
     border: 1px solid var(--panel-border-color);
     border-radius: 8px;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(250, 252, 251, 0.94));
+    background: transparent;
     box-shadow: 0 24px 70px rgba(31, 46, 42, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.8);
   }
 
@@ -1145,15 +1145,14 @@
     line-height: inherit;
     text-align: inherit;
     text-decoration: underline;
-    text-decoration-color: #000;
+    text-decoration-color: currentColor;
     text-decoration-thickness: 1px;
-    text-underline-offset: 0.16em;
+    text-underline-offset: 0.07em;
     cursor: pointer;
   }
 
   .topical-guide-link:hover {
     color: #235f57;
-    text-decoration-thickness: 2px;
   }
 
   .topical-guide-link:focus-visible {

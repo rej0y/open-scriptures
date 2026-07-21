@@ -400,6 +400,21 @@
     }
   }
 
+  function closeTopicalGuide() {
+    if (!selectedTopicLink) return;
+    topicalGuideRequest += 1;
+    selectedTopicLink = null;
+    topicalGuideTopic = null;
+    topicalGuideError = '';
+    isLoadingTopicalGuide = false;
+  }
+
+  function closeTopicalGuideFromMainClick(event: MouseEvent) {
+    if (event.target instanceof Node && carouselViewport?.contains(event.target)) {
+      closeTopicalGuide();
+    }
+  }
+
   onMount(async () => {
     try {
       await readerActions.bootstrap(selectedBook, selectedChapter);
@@ -419,7 +434,10 @@
   />
 </svelte:head>
 
-<svelte:document on:selectionchange={updatePendingSelection} />
+<svelte:document
+  on:click={closeTopicalGuideFromMainClick}
+  on:selectionchange={updatePendingSelection}
+/>
 <svelte:window
   on:pointerup={readerActions.saveCurrentSelectionSoon}
   on:mouseup={readerActions.saveCurrentSelectionSoon}
@@ -552,6 +570,7 @@
     align-items: flex-start;
     width: 100%;
     min-width: 0;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(250, 252, 251, 0.94));
   }
 
   .reader-shell {
