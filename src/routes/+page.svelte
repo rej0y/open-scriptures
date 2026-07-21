@@ -20,6 +20,7 @@
     loadBooks,
     loadChapter as fetchChapter,
     loadTopicalGuideTopic,
+    loadTopicalGuideTopicByTitle,
     loadBookmarks as fetchBookmarks,
     loadSavedWords as fetchSavedWords,
     removeSavedHighlight as removeSavedHighlightRemote,
@@ -79,6 +80,11 @@
   let topicalGuideError = '';
   let isLoadingTopicalGuide = false;
   let topicalGuideRequest = 0;
+  let relatedTopicTitle = '';
+  let relatedTopicalGuideTopic: TopicalGuideTopic | null = null;
+  let relatedTopicalGuideError = '';
+  let isLoadingRelatedTopicalGuide = false;
+  let relatedTopicalGuideRequest = 0;
   let noteSaveTimer: number | undefined;
   const pendingNoteSaves = new Map<string, ChapterNote[]>();
 
@@ -396,10 +402,15 @@
 
   async function openTopicalGuide(topicLink: TopicalGuideLink) {
     const request = ++topicalGuideRequest;
+    relatedTopicalGuideRequest += 1;
     selectedTopicLink = topicLink;
     topicalGuideTopic = null;
     topicalGuideError = '';
     isLoadingTopicalGuide = true;
+    relatedTopicTitle = '';
+    relatedTopicalGuideTopic = null;
+    relatedTopicalGuideError = '';
+    isLoadingRelatedTopicalGuide = false;
     await recenterCarouselAfterLayoutChange();
 
     if (request !== topicalGuideRequest) return;
@@ -416,19 +427,66 @@
     }
   }
 
+  async function openRelatedTopicalGuide(topicTitle: string) {
+    const request = ++relatedTopicalGuideRequest;
+    relatedTopicTitle = topicTitle;
+    relatedTopicalGuideTopic = null;
+    relatedTopicalGuideError = '';
+    isLoadingRelatedTopicalGuide = true;
+    await recenterCarouselAfterLayoutChange();
+
+    if (request !== relatedTopicalGuideRequest) return;
+
+    try {
+      const topic = await loadTopicalGuideTopicByTitle(topicTitle);
+      if (request === relatedTopicalGuideRequest) relatedTopicalGuideTopic = topic;
+    } catch (error) {
+      if (request === relatedTopicalGuideRequest) {
+        relatedTopicalGuideError = error instanceof Error ? error.message : String(error);
+      }
+    } finally {
+      if (request === relatedTopicalGuideRequest) isLoadingRelatedTopicalGuide = false;
+    }
+  }
+
   function closeTopicalGuide() {
     if (!selectedTopicLink) return;
     topicalGuideRequest += 1;
+    relatedTopicalGuideRequest += 1;
     selectedTopicLink = null;
     topicalGuideTopic = null;
     topicalGuideError = '';
     isLoadingTopicalGuide = false;
+    relatedTopicTitle = '';
+    relatedTopicalGuideTopic = null;
+    relatedTopicalGuideError = '';
+    isLoadingRelatedTopicalGuide = false;
+    void recenterCarouselAfterLayoutChange();
+  }
+
+  function closeRelatedTopicalGuide() {
+    if (!relatedTopicTitle) return;
+    relatedTopicalGuideRequest += 1;
+    relatedTopicTitle = '';
+    relatedTopicalGuideTopic = null;
+    relatedTopicalGuideError = '';
+    isLoadingRelatedTopicalGuide = false;
     void recenterCarouselAfterLayoutChange();
   }
 
   function closeTopicalGuideFromMainClick(event: MouseEvent) {
-    if (event.target instanceof Node && carouselViewport?.contains(event.target)) {
+    if (event.target instanceof Element && event.target.closest('.reader-scroll-viewport')) {
       closeTopicalGuide();
+      return;
+    }
+
+    if (
+      relatedTopicTitle &&
+      event.target instanceof Element &&
+      event.target.closest('.topical-guide-page.primary') &&
+      !event.target.closest('.related-topic-button')
+    ) {
+      closeRelatedTopicalGuide();
     }
   }
 
@@ -466,14 +524,18 @@
 
 <div class="reader-layout">
   <main
-    bind:this={carouselViewport}
-    class="reader-shell chapter-carousel-viewport"
-    class:carousel-recentering={isCarouselRecentering}
-    class:topical-guide-open={Boolean(selectedTopicLink)}
-    style:height={activeChapterSlideHeight ? `${activeChapterSlideHeight}px` : undefined}
-    on:scroll={handleCarouselScroll}
+    class="reader-shell reader-scroll-viewport"
+    on:scroll={updateSelectionOverlay}
   >
-    <div class="chapter-carousel">
+    <div
+      bind:this={carouselViewport}
+      class="chapter-carousel-viewport"
+      class:carousel-recentering={isCarouselRecentering}
+      class:topical-guide-open={Boolean(selectedTopicLink)}
+      style:height={activeChapterSlideHeight ? `${activeChapterSlideHeight}px` : undefined}
+      on:scroll={handleCarouselScroll}
+    >
+      <div class="chapter-carousel">
       <div class="chapter-slide">
         {#if previousChapterPreview}
           <ChapterView
@@ -523,6 +585,7 @@
           />
         {/if}
       </div>
+      </div>
     </div>
   </main>
 
@@ -532,6 +595,20 @@
       topic={topicalGuideTopic}
       isLoading={isLoadingTopicalGuide}
       errorMessage={topicalGuideError}
+      compact={Boolean(relatedTopicTitle)}
+      primary
+      onOpenRelatedTopic={openRelatedTopicalGuide}
+    />
+  {/if}
+
+  {#if relatedTopicTitle}
+    <TopicalGuidePage
+      title={relatedTopicTitle}
+      topic={relatedTopicalGuideTopic}
+      isLoading={isLoadingRelatedTopicalGuide}
+      errorMessage={relatedTopicalGuideError}
+      compact
+      onOpenRelatedTopic={openRelatedTopicalGuide}
     />
   {/if}
 </div>
@@ -587,7 +664,9 @@
     display: flex;
     align-items: flex-start;
     width: 100%;
+    height: 100dvh;
     min-width: 0;
+    overflow: hidden;
     background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(250, 252, 251, 0.94));
   }
 
@@ -620,21 +699,25 @@
     padding: var(--shell-padding);
   }
 
-  .chapter-carousel-viewport {
+  .reader-scroll-viewport {
     flex: 1 1 auto;
     width: auto;
     min-width: 0;
+    height: 100dvh;
+    padding: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .chapter-carousel-viewport {
+    width: 100%;
+    min-width: 0;
     padding: 0;
     overflow-x: auto;
-    overflow-y: clip;
+    overflow-y: hidden;
     overscroll-behavior-x: contain;
     scroll-behavior: smooth;
     scroll-snap-type: x mandatory;
-    scrollbar-width: none;
-  }
-
-  .chapter-carousel-viewport::-webkit-scrollbar {
-    display: none;
   }
 
   .chapter-carousel-viewport.carousel-recentering {

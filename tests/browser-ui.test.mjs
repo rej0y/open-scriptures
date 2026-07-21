@@ -329,6 +329,14 @@ function buildMockInvokeSource() {
                 '1 Ne. 1:1 I, Nephi,\\nhaving been born of goodly parents; 1 Ne. 1:2 Yea, I make a record.',
               source_page: 321
             };
+          case 'get_topical_guide_topic_by_title':
+            return {
+              id: 2,
+              title: String(args.topicTitle),
+              related_topics: 'See also Nephi',
+              content: '1 Ne. 6:3 I should write of the things of God.',
+              source_page: 322
+            };
           case 'search_scriptures': {
             const query = String(args.query ?? '').toLowerCase();
             if (query.includes('nephi')) {
@@ -734,13 +742,32 @@ test('topical guide words are underlined and open the side page', async (t) => {
   const paneLayout = await evaluate(
     harness.client,
     `(() => {
-      const main = document.querySelector('.chapter-carousel-viewport').getBoundingClientRect();
-      const panel = document.querySelector('.topical-guide-page').getBoundingClientRect();
-      return { mainRight: main.right, panelLeft: panel.left, panelRight: panel.right };
+      const mainElement = document.querySelector('.reader-scroll-viewport');
+      const main = mainElement.getBoundingClientRect();
+      const panelElement = document.querySelector('.topical-guide-page');
+      const panel = panelElement.getBoundingClientRect();
+      return {
+        mainRight: main.right,
+        panelLeft: panel.left,
+        panelRight: panel.right,
+        mainOverflowY: getComputedStyle(mainElement).overflowY,
+        panelOverflowY: getComputedStyle(panelElement).overflowY,
+        mainScrollbarWidth: getComputedStyle(
+          mainElement,
+          '::-webkit-scrollbar'
+        ).width,
+        panelScrollbarWidth: getComputedStyle(panelElement, '::-webkit-scrollbar').width,
+        documentHeight: document.documentElement.scrollHeight,
+        viewportHeight: window.innerHeight
+      };
     })()`
   );
   assert(paneLayout.mainRight <= paneLayout.panelLeft + 1, JSON.stringify(paneLayout));
   assert(paneLayout.panelRight <= 800, JSON.stringify(paneLayout));
+  assert.equal(paneLayout.mainOverflowY, 'auto');
+  assert.equal(paneLayout.panelOverflowY, 'auto');
+  assert.equal(paneLayout.panelScrollbarWidth, paneLayout.mainScrollbarWidth);
+  assert(paneLayout.documentHeight <= paneLayout.viewportHeight + 1, JSON.stringify(paneLayout));
   assert.equal(
     await evaluate(harness.client, 'getComputedStyle(document.querySelector(".topical-guide-page")).boxShadow'),
     'none'
@@ -761,6 +788,37 @@ test('topical guide words are underlined and open the side page', async (t) => {
     'Nephi'
   );
 
+  await clickSelector(harness.client, '.topical-guide-page .related-topics button');
+  await waitFor(
+    harness.client,
+    async () =>
+      (await evaluate(
+        harness.client,
+        'document.querySelectorAll(".topical-guide-page").length'
+      )) === 2
+  );
+  assert.deepEqual(
+    await evaluate(
+      harness.client,
+      'Array.from(document.querySelectorAll(".topical-guide-page h2"), (heading) => heading.textContent)'
+    ),
+    ['Nephi', 'Book of Mormon']
+  );
+
+  await clickSelector(harness.client, '.topical-guide-page.primary header');
+  await waitFor(
+    harness.client,
+    async () =>
+      (await evaluate(
+        harness.client,
+        'document.querySelectorAll(".topical-guide-page").length'
+      )) === 1
+  );
+  assert.equal(
+    await getText(harness.client, '.topical-guide-page h2'),
+    'Nephi'
+  );
+
   await clickSelector(harness.client, '.chapter-slide:nth-child(2) .chapter-header');
   await waitFor(
     harness.client,
@@ -770,6 +828,7 @@ test('topical guide words are underlined and open the side page', async (t) => {
 
   const commands = await getCallCommands(harness.client);
   assert(commands.includes('get_topical_guide_topic'));
+  assert(commands.includes('get_topical_guide_topic_by_title'));
 });
 
 test('topical guide keeps notes visible on the main page', async (t) => {

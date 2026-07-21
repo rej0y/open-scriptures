@@ -28,6 +28,10 @@ export function loadTopicalGuideTopic(topicId: number) {
   return invoke<TopicalGuideTopic>('get_topical_guide_topic', { topicId });
 }
 
+export function loadTopicalGuideTopicByTitle(topicTitle: string) {
+  return invoke<TopicalGuideTopic>('get_topical_guide_topic_by_title', { topicTitle });
+}
+
 export function loadSavedWords() {
   return invoke<SavedWord[]>('list_saved_words');
 }

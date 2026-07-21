@@ -5,6 +5,9 @@
   export let topic: TopicalGuideTopic | null = null;
   export let isLoading = false;
   export let errorMessage = '';
+  export let compact = false;
+  export let primary = false;
+  export let onOpenRelatedTopic = (_title: string) => {};
 
   function splitTopLevelEntries(value: string) {
     const entries: string[] = [];
@@ -38,7 +41,13 @@
   $: referenceEntries = topic?.content ? splitTopLevelEntries(topic.content) : [];
 </script>
 
-<aside class="topical-guide-page" aria-label="Topical Guide" aria-live="polite">
+<aside
+  class="topical-guide-page"
+  class:compact
+  class:primary
+  aria-label={`Topical Guide: ${topic?.title ?? title}`}
+  aria-live="polite"
+>
   <header>
     <p class="eyebrow">Topical Guide</p>
     <h2>{topic?.title ?? title}</h2>
@@ -50,18 +59,26 @@
     <p class="status error" role="alert">{errorMessage}</p>
   {:else if topic}
     {#if relatedTopics.length > 0}
-      <section class="related-topics" aria-labelledby="related-topics-title">
-        <h3 id="related-topics-title">See also</h3>
+      <section class="related-topics" aria-label="Related topics">
+        <h3>See also</h3>
         <ul>
           {#each relatedTopics as relatedTopic}
-            <li>{relatedTopic}</li>
+            <li>
+              <button
+                class="related-topic-button"
+                type="button"
+                on:click={() => onOpenRelatedTopic(relatedTopic)}
+              >
+                {relatedTopic}
+              </button>
+            </li>
           {/each}
         </ul>
       </section>
     {/if}
     {#if referenceEntries.length > 0}
-      <section class="topic-content" aria-labelledby="references-title">
-        <h3 id="references-title">Scripture references</h3>
+      <section class="topic-content" aria-label="Scripture references">
+        <h3>Scripture references</h3>
         <div class="reference-list">
           {#each referenceEntries as referenceEntry}
             <p>{referenceEntry}</p>
@@ -88,6 +105,11 @@
     padding: clamp(1.25rem, 3vw, 2rem);
     color: #1c2a2e;
     background: transparent;
+  }
+
+  .topical-guide-page.compact {
+    flex-basis: min(26rem, 32vw);
+    width: min(26rem, 32vw);
   }
 
   header {
@@ -132,9 +154,26 @@
     list-style: none;
   }
 
-  .related-topics li {
+  .related-topics button {
+    border: 0;
+    padding: 0;
     color: #24332f;
+    background: transparent;
+    cursor: pointer;
     font: 400 0.98rem/1.45 Georgia, "Times New Roman", serif;
+    text-align: left;
+  }
+
+  .related-topics button:hover {
+    color: #000;
+    text-decoration: underline;
+    text-underline-offset: 0.1em;
+  }
+
+  .related-topics button:focus-visible {
+    border-radius: 2px;
+    outline: 2px solid #2f766d;
+    outline-offset: 2px;
   }
 
   .topic-content {

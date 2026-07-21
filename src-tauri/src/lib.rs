@@ -3,8 +3,9 @@ mod logging;
 mod storage;
 
 use commands::{
-    get_chapter, get_topical_guide_topic, list_bookmarks, list_books, list_saved_words,
-    remove_bookmark, remove_saved_word, save_bookmark, save_word, search_scriptures,
+    get_chapter, get_topical_guide_topic, get_topical_guide_topic_by_title, list_bookmarks,
+    list_books, list_saved_words, remove_bookmark, remove_saved_word, save_bookmark, save_word,
+    search_scriptures,
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -20,6 +21,7 @@ pub fn run() {
             list_books,
             get_chapter,
             get_topical_guide_topic,
+            get_topical_guide_topic_by_title,
             search_scriptures,
             list_bookmarks,
             list_saved_words,
