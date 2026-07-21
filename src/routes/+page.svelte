@@ -73,6 +73,8 @@
   let isCarouselRecentering = false;
   let carouselViewport: HTMLElement;
   let carouselSettleTimer: number | undefined;
+  let carouselLayoutFrame: number | undefined;
+  let carouselLayoutRequest = 0;
   let hasCenteredCarousel = false;
   let activeChapterSlideHeight: number | undefined;
   let selectedTopicLink: TopicalGuideLink | null = null;
@@ -87,11 +89,14 @@
     topic: TopicalGuideTopic | null;
     errorMessage: string;
     isLoading: boolean;
+    isClosing: boolean;
   }> = [];
   let noteSaveTimer: number | undefined;
   const pendingNoteSaves = new Map<string, ChapterNote[]>();
 
-  $: topicalGuidePanelCount = selectedTopicLink ? 1 + relatedTopicalGuidePanels.length : 0;
+  $: topicalGuidePanelCount = selectedTopicLink
+    ? 1 + relatedTopicalGuidePanels.filter((panel) => !panel.isClosing).length
+    : 0;
 
   const readerState = createReaderStateAdapter({
     books: [() => books, (value) => (books = value)],
@@ -297,11 +302,27 @@
   }
 
   async function recenterCarouselAfterLayoutChange() {
+    const request = ++carouselLayoutRequest;
+    if (carouselLayoutFrame !== undefined) cancelAnimationFrame(carouselLayoutFrame);
     isCarouselRecentering = true;
     await tick();
+    if (request !== carouselLayoutRequest) return;
+
+    const startedAt = performance.now();
+    const keepCentered = (timestamp: number) => {
+      if (request !== carouselLayoutRequest) return;
+      centerCarousel();
+
+      if (timestamp - startedAt < 280) {
+        carouselLayoutFrame = requestAnimationFrame(keepCentered);
+      } else {
+        carouselLayoutFrame = undefined;
+        isCarouselRecentering = false;
+      }
+    };
+
     centerCarousel();
-    await tick();
-    isCarouselRecentering = false;
+    carouselLayoutFrame = requestAnimationFrame(keepCentered);
   }
 
   function carouselPageWidth() {
@@ -432,7 +453,14 @@
     const key = ++nextRelatedTopicPanelKey;
     relatedTopicalGuidePanels = [
       ...relatedTopicalGuidePanels.slice(0, sourcePanelIndex),
-      { key, title: topicTitle, topic: null, errorMessage: '', isLoading: true }
+      {
+        key,
+        title: topicTitle,
+        topic: null,
+        errorMessage: '',
+        isLoading: true,
+        isClosing: false
+      }
     ];
     await recenterCarouselAfterLayoutChange();
 
@@ -467,8 +495,18 @@
 
   function closeTopicalGuidePanelsAfter(panelIndex: number) {
     if (panelIndex >= topicalGuidePanelCount - 1) return;
-    relatedTopicalGuidePanels = relatedTopicalGuidePanels.slice(0, panelIndex);
+    const closingKeys = new Set(
+      relatedTopicalGuidePanels.slice(panelIndex).map((panel) => panel.key)
+    );
+    relatedTopicalGuidePanels = relatedTopicalGuidePanels.map((panel) =>
+      closingKeys.has(panel.key) ? { ...panel, isClosing: true } : panel
+    );
     void recenterCarouselAfterLayoutChange();
+    window.setTimeout(() => {
+      relatedTopicalGuidePanels = relatedTopicalGuidePanels.filter(
+        (panel) => !closingKeys.has(panel.key)
+      );
+    }, 260);
   }
 
   function closeTopicalGuideFromMainClick(event: MouseEvent) {
@@ -492,7 +530,11 @@
     }
   });
 
-  onDestroy(flushPendingChapterNotes);
+  onDestroy(() => {
+    carouselLayoutRequest += 1;
+    if (carouselLayoutFrame !== undefined) cancelAnimationFrame(carouselLayoutFrame);
+    flushPendingChapterNotes();
+  });
 </script>
 <svelte:head>
   <title>Open Scriptures</title>
@@ -606,7 +648,10 @@
       errorMessage={panel.errorMessage}
       compact={topicalGuidePanelCount >= 2}
       threeColumn={topicalGuidePanelCount >= 3}
-      hidden={topicalGuidePanelCount >= 3 && index + 1 < topicalGuidePanelCount - 3}
+      hidden={
+        panel.isClosing ||
+        (topicalGuidePanelCount >= 3 && index + 1 < topicalGuidePanelCount - 3)
+      }
       panelIndex={index + 1}
       onOpenRelatedTopic={(title) => openRelatedTopicalGuide(title, index + 1)}
     />
@@ -700,28 +745,22 @@
   }
 
   .reader-scroll-viewport {
-    flex: 1 1 auto;
-    width: auto;
+    flex: 1 1 0;
+    width: 0;
     min-width: 0;
     height: 100dvh;
     padding: 0;
     overflow-x: hidden;
     overflow-y: auto;
     opacity: 1;
-    transform: translateX(0);
-    transition:
-      flex-basis 260ms ease,
-      width 260ms ease,
-      opacity 180ms ease,
-      transform 260ms ease;
+    transition: opacity 180ms ease;
   }
 
   .reader-scroll-viewport.reader-page-hidden {
-    flex: 0 0 0;
-    width: 0;
+    flex-grow: 0;
+    flex-shrink: 0;
     opacity: 0;
     pointer-events: none;
-    transform: translateX(-1.25rem);
   }
 
   .chapter-carousel-viewport {

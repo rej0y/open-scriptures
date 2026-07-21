@@ -113,7 +113,7 @@
     padding: clamp(1.25rem, 3vw, 2rem);
     color: #1c2a2e;
     background: transparent;
-    animation: topical-guide-enter 260ms ease both;
+    animation: topical-guide-enter 260ms ease backwards;
     opacity: 1;
     transform: translateX(0);
     transition:

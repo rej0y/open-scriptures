@@ -839,6 +839,52 @@ test('topical guide words are underlined and open the side page', async (t) => {
     '0s'
   );
 
+  await clickSelector(harness.client, '.topical-guide-page.primary header');
+  await waitFor(
+    harness.client,
+    async () =>
+      (await evaluate(
+        harness.client,
+        'document.querySelectorAll(".topical-guide-page").length'
+      )) === 1
+  );
+  const restoredMainPage = await evaluate(
+    harness.client,
+    `(() => {
+      const main = document.querySelector('.reader-scroll-viewport');
+      return {
+        width: main.getBoundingClientRect().width,
+        opacity: getComputedStyle(main).opacity,
+        heading: main.querySelector('.chapter-slide:nth-child(2) h1').textContent
+      };
+    })()`
+  );
+  assert(restoredMainPage.width > 0, JSON.stringify(restoredMainPage));
+  assert.equal(restoredMainPage.opacity, '1');
+  assert.equal(restoredMainPage.heading, '1 Nephi 1');
+
+  await clickSelector(harness.client, '.topical-guide-page.primary .related-topic-button');
+  await waitFor(
+    harness.client,
+    async () =>
+      (await evaluate(
+        harness.client,
+        'document.querySelectorAll(".topical-guide-page").length'
+      )) === 2
+  );
+  await clickSelector(
+    harness.client,
+    '.topical-guide-page[data-panel-index="1"] .related-topic-button'
+  );
+  await waitFor(
+    harness.client,
+    async () =>
+      (await evaluate(
+        harness.client,
+        'document.querySelectorAll(".topical-guide-page").length'
+      )) === 3
+  );
+
   await clickSelector(
     harness.client,
     '.topical-guide-page[data-panel-index="2"] .related-topic-button'
@@ -874,6 +920,12 @@ test('topical guide words are underlined and open the side page', async (t) => {
       'document.querySelector(".reader-scroll-viewport").classList.contains("reader-page-hidden")'
     ),
     false
+  );
+  assert(
+    (await evaluate(
+      harness.client,
+      'document.querySelector(".reader-scroll-viewport").getBoundingClientRect().width'
+    )) > 0
   );
 
   await clickSelector(harness.client, '.topical-guide-page.primary header');
