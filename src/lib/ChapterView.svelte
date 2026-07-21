@@ -1152,7 +1152,7 @@
   }
 
   .topical-guide-link:hover {
-    color: #235f57;
+    color: #000;
   }
 
   .topical-guide-link:focus-visible {
