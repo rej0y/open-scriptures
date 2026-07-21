@@ -13,7 +13,9 @@ The goal is to build a local-first desktop app that can eventually support advan
 - Scripture search with clickable results
 - Chapter bookmarks
 - Saved word selections stored in local app data
+- Interactive chapter notes with local persistence, automatic sizing, dragging, and resizing
 - Responsive reader layout with a minimal reading-focused design
+- Automated TypeScript logic and browser UI tests
 
 ## Project Goals
 
@@ -90,10 +92,10 @@ cargo check
 
 ## Future Work
 
-- [ ] Add note taking
+- [x] Add note taking
 - [x] Add saved word highlights
 - [ ] Add stronger search tools, including filters and phrase matching
 - [ ] Add cross-references and study links
 - [ ] Add user-owned local study data storage
 - [ ] Add import/export or sync options for personal study data
-- [ ] Add automated tests around scripture data access and UI behavior
+- [x] Add automated tests around scripture data access and UI behavior
