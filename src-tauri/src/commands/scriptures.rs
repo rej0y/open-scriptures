@@ -18,7 +18,8 @@ pub(crate) fn list_books(app: tauri::AppHandle) -> Result<Vec<ScriptureBook>, St
     let mut statement = connection
         .prepare(
             "
-            select books.book_title, volumes.volume_title, count(chapters.id) as chapter_count
+            select books.book_title, books.book_short_title, volumes.volume_title,
+              count(chapters.id) as chapter_count
             from books
             inner join volumes on volumes.id = books.volume_id
             inner join chapters on chapters.book_id = books.id
@@ -32,8 +33,9 @@ pub(crate) fn list_books(app: tauri::AppHandle) -> Result<Vec<ScriptureBook>, St
         .query_map([], |row| {
             Ok(ScriptureBook {
                 title: row.get(0)?,
-                volume: row.get(1)?,
-                chapter_count: row.get(2)?,
+                short_title: row.get(1)?,
+                volume: row.get(2)?,
+                chapter_count: row.get(3)?,
             })
         })
         .map_err(|error| log_command_error("Could not query books", error))?

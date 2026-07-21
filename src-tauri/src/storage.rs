@@ -45,6 +45,7 @@ pub(crate) struct ScriptureChapter {
 #[derive(Serialize)]
 pub(crate) struct ScriptureBook {
     pub title: String,
+    pub short_title: String,
     pub volume: String,
     pub chapter_count: i64,
 }

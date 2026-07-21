@@ -10,8 +10,8 @@ import {
 import type { SavedWord, ScriptureBook, ScriptureChapter } from '$lib/study';
 
 const books: ScriptureBook[] = [
-  { title: '1 Nephi', volume: 'Book of Mormon', chapter_count: 22 },
-  { title: '2 Nephi', volume: 'Book of Mormon', chapter_count: 33 }
+  { title: '1 Nephi', short_title: '1 Ne.', volume: 'Book of Mormon', chapter_count: 22 },
+  { title: '2 Nephi', short_title: '2 Ne.', volume: 'Book of Mormon', chapter_count: 33 }
 ];
 
 const chapter: ScriptureChapter = {

@@ -31,6 +31,7 @@ export type ScriptureChapter = {
 
 export type ScriptureBook = {
   title: string;
+  short_title: string;
   volume: string;
   chapter_count: number;
 };

@@ -11,6 +11,7 @@
   export let panelIndex = 0;
   export let primary = false;
   export let onOpenRelatedTopic = (_title: string) => {};
+  export let onOpenScriptureReference = (_book: string, _chapter: number, _verse: number) => {};
 
   function splitTopLevelEntries(value: string) {
     const entries: string[] = [];
@@ -38,6 +39,19 @@
     return entries;
   }
 
+  function referenceParts(entry: string) {
+    const match = entry.match(/^(.+?)\s+(\d+):(\d+)(?:[-–,]\d+)*/);
+    if (!match) return null;
+
+    return {
+      citation: match[0],
+      book: match[1],
+      chapter: Number(match[2]),
+      verse: Number(match[3]),
+      description: entry.slice(match[0].length)
+    };
+  }
+
   $: relatedTopics = topic?.related_topics
     ? splitTopLevelEntries(topic.related_topics.replace(/^See(?: also)?\s*/i, ''))
     : [];
@@ -45,7 +59,7 @@
 </script>
 
 <aside
-  class="topical-guide-page"
+  class="topical-guide-page reader-side-page"
   class:compact
   class:three-column={threeColumn}
   class:panel-hidden={hidden}
@@ -89,7 +103,23 @@
         <h3>Scripture references</h3>
         <div class="reference-list">
           {#each referenceEntries as referenceEntry}
-            <p>{referenceEntry}</p>
+            {@const reference = referenceParts(referenceEntry)}
+            <p>
+              {#if reference}
+                <button
+                  class="scripture-reference-button"
+                  type="button"
+                  on:click={() =>
+                    onOpenScriptureReference(
+                      reference.book,
+                      reference.chapter,
+                      reference.verse
+                    )}
+                >{reference.citation}</button>{reference.description}
+              {:else}
+                {referenceEntry}
+              {/if}
+            </p>
           {/each}
         </div>
       </section>
@@ -230,6 +260,28 @@
     margin: 0;
     padding: 0.72rem 0;
     border-bottom: 1px solid rgba(52, 79, 72, 0.1);
+  }
+
+  .scripture-reference-button {
+    margin: 0;
+    border: 0;
+    padding: 0;
+    color: inherit;
+    background: transparent;
+    cursor: pointer;
+    font: inherit;
+    text-decoration: underline;
+    text-underline-offset: 0.1em;
+  }
+
+  .scripture-reference-button:hover {
+    color: #000;
+  }
+
+  .scripture-reference-button:focus-visible {
+    border-radius: 0.15rem;
+    outline: 2px solid rgba(47, 118, 109, 0.72);
+    outline-offset: 0.15rem;
   }
 
   .reference-list p:first-child {

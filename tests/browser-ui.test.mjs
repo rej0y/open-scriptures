@@ -223,8 +223,8 @@ async function launchChrome(debugPort, appUrl) {
 function buildMockInvokeSource() {
   const mockState = {
     books: [
-      { title: '1 Nephi', volume: 'Book of Mormon', chapter_count: 2 },
-      { title: '2 Nephi', volume: 'Book of Mormon', chapter_count: 1 }
+      { title: '1 Nephi', short_title: '1 Ne.', volume: 'Book of Mormon', chapter_count: 2 },
+      { title: '2 Nephi', short_title: '2 Ne.', volume: 'Book of Mormon', chapter_count: 1 }
     ],
     chapters: {
       '1 Nephi:1': {
@@ -786,6 +786,89 @@ test('topical guide words are underlined and open the side page', async (t) => {
   assert.equal(
     await getText(harness.client, '.topical-guide-page h2'),
     'Nephi'
+  );
+  assert.deepEqual(
+    await evaluate(
+      harness.client,
+      'Array.from(document.querySelectorAll(".scripture-reference-button"), (button) => button.textContent)'
+    ),
+    ['1 Ne. 1:1', '1 Ne. 1:2']
+  );
+
+  await clickSelector(
+    harness.client,
+    '.reference-list p:nth-child(2) .scripture-reference-button'
+  );
+  await waitFor(
+    harness.client,
+    async () => (await getText(harness.client, '.scripture-reference-page h2')) === '1 Nephi 1'
+  );
+  assert.equal(
+    await evaluate(
+      harness.client,
+      'document.querySelectorAll(".reader-side-page").length'
+    ),
+    2
+  );
+  assert.equal(await getText(harness.client, '.chapter-slide:nth-child(2) h1'), '1 Nephi 1');
+  assert.equal(
+    await getText(harness.client, '.scripture-reference-page .referenced-verse .verse-number'),
+    '2'
+  );
+  const verseTypography = await evaluate(
+    harness.client,
+    `(() => {
+      const properties = ['fontFamily'];
+      const main = getComputedStyle(document.querySelector('.chapter-slide:nth-child(2) .verse-row p'));
+      const side = getComputedStyle(document.querySelector('.scripture-reference-page .verse-row p'));
+      return {
+        main: Object.fromEntries(properties.map((property) => [property, main[property]])),
+        side: Object.fromEntries(properties.map((property) => [property, side[property]]))
+      };
+    })()`
+  );
+  assert.deepEqual(verseTypography.side, verseTypography.main);
+  assert.equal(
+    await evaluate(
+      harness.client,
+      `(() => {
+        const panel = document.querySelector('.scripture-reference-page').getBoundingClientRect();
+        const heading = document.querySelector('.scripture-reference-page h2').getBoundingClientRect();
+        return heading.left >= panel.left && heading.right <= panel.right;
+      })()`
+    ),
+    true
+  );
+  assert.deepEqual(
+    await evaluate(
+      harness.client,
+      `(() => {
+        const style = getComputedStyle(document.querySelector('.scripture-reference-page .chapter-view'));
+        return { borderWidth: style.borderWidth, boxShadow: style.boxShadow };
+      })()`
+    ),
+    { borderWidth: '0px', boxShadow: 'none' }
+  );
+  assert.equal(
+    await evaluate(
+      harness.client,
+      `(() => {
+        return globalThis.__OPEN_SCRIPTURES_CALLS__.some(
+          (entry) =>
+            entry.command === 'get_chapter' &&
+            entry.args.book === '1 Nephi' &&
+            entry.args.chapterNumber === 1
+        );
+      })()`
+    ),
+    true
+  );
+
+  await clickSelector(harness.client, '.topical-guide-page.primary header');
+  await waitFor(
+    harness.client,
+    async () =>
+      (await evaluate(harness.client, 'document.querySelector(".scripture-reference-page")')) === null
   );
 
   await clickSelector(harness.client, '.topical-guide-page .related-topics button');

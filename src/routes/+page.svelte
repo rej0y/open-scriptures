@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount, tick } from 'svelte';
   import ChapterView from '$lib/ChapterView.svelte';
+  import ScriptureReferencePage from '$lib/ScriptureReferencePage.svelte';
   import TopicalGuidePage from '$lib/TopicalGuidePage.svelte';
   import {
     type ChapterBookmark,
@@ -83,14 +84,27 @@
   let isLoadingTopicalGuide = false;
   let topicalGuideRequest = 0;
   let nextRelatedTopicPanelKey = 0;
-  let relatedTopicalGuidePanels: Array<{
-    key: number;
-    title: string;
-    topic: TopicalGuideTopic | null;
-    errorMessage: string;
-    isLoading: boolean;
-    isClosing: boolean;
-  }> = [];
+  let relatedTopicalGuidePanels: Array<
+    | {
+        kind: 'topic';
+        key: number;
+        title: string;
+        topic: TopicalGuideTopic | null;
+        errorMessage: string;
+        isLoading: boolean;
+        isClosing: boolean;
+      }
+    | {
+        kind: 'scripture';
+        key: number;
+        title: string;
+        chapter: ScriptureChapter | null;
+        verse: number;
+        errorMessage: string;
+        isLoading: boolean;
+        isClosing: boolean;
+      }
+  > = [];
   let noteSaveTimer: number | undefined;
   const pendingNoteSaves = new Map<string, ChapterNote[]>();
 
@@ -386,6 +400,58 @@
     void readerActions.openChapter(book, chapterNumber);
   }
 
+  async function openTopicalGuideScriptureReference(
+    abbreviatedBook: string,
+    chapterNumber: number,
+    verseNumber: number,
+    sourcePanelIndex: number
+  ) {
+    const normalizedBook = abbreviatedBook.trim().toLocaleLowerCase();
+    const book = books.find(
+      (candidate) =>
+        candidate.title.toLocaleLowerCase() === normalizedBook ||
+        candidate.short_title.toLocaleLowerCase() === normalizedBook
+    );
+    if (!book) return;
+
+    const key = ++nextRelatedTopicPanelKey;
+    relatedTopicalGuidePanels = [
+      ...relatedTopicalGuidePanels.slice(0, sourcePanelIndex),
+      {
+        kind: 'scripture',
+        key,
+        title: `${book.title} ${chapterNumber}:${verseNumber}`,
+        chapter: null,
+        verse: verseNumber,
+        errorMessage: '',
+        isLoading: true,
+        isClosing: false
+      }
+    ];
+    await recenterCarouselAfterLayoutChange();
+
+    try {
+      const loadedChapter = await fetchChapter(book.title, chapterNumber);
+      relatedTopicalGuidePanels = relatedTopicalGuidePanels.map((panel) =>
+        panel.key === key && panel.kind === 'scripture'
+          ? { ...panel, chapter: loadedChapter }
+          : panel
+      );
+    } catch (error) {
+      relatedTopicalGuidePanels = relatedTopicalGuidePanels.map((panel) =>
+        panel.key === key && panel.kind === 'scripture'
+          ? { ...panel, errorMessage: error instanceof Error ? error.message : String(error) }
+          : panel
+      );
+    } finally {
+      relatedTopicalGuidePanels = relatedTopicalGuidePanels.map((panel) =>
+        panel.key === key && panel.kind === 'scripture'
+          ? { ...panel, isLoading: false }
+          : panel
+      );
+    }
+  }
+
   async function settleChapterSwipe(destination: ScriptureChapter, direction: -1 | 1) {
     const departingChapter = chapter;
 
@@ -454,6 +520,7 @@
     relatedTopicalGuidePanels = [
       ...relatedTopicalGuidePanels.slice(0, sourcePanelIndex),
       {
+        kind: 'topic',
         key,
         title: topicTitle,
         topic: null,
@@ -467,17 +534,17 @@
     try {
       const topic = await loadTopicalGuideTopicByTitle(topicTitle);
       relatedTopicalGuidePanels = relatedTopicalGuidePanels.map((panel) =>
-        panel.key === key ? { ...panel, topic } : panel
+        panel.key === key && panel.kind === 'topic' ? { ...panel, topic } : panel
       );
     } catch (error) {
       relatedTopicalGuidePanels = relatedTopicalGuidePanels.map((panel) =>
-        panel.key === key
+        panel.key === key && panel.kind === 'topic'
           ? { ...panel, errorMessage: error instanceof Error ? error.message : String(error) }
           : panel
       );
     } finally {
       relatedTopicalGuidePanels = relatedTopicalGuidePanels.map((panel) =>
-        panel.key === key ? { ...panel, isLoading: false } : panel
+        panel.key === key && panel.kind === 'topic' ? { ...panel, isLoading: false } : panel
       );
     }
   }
@@ -515,8 +582,11 @@
       return;
     }
 
-    if (event.target instanceof Element && !event.target.closest('.related-topic-button')) {
-      const panel = event.target.closest<HTMLElement>('.topical-guide-page');
+    if (
+      event.target instanceof Element &&
+      !event.target.closest('.related-topic-button, .scripture-reference-button')
+    ) {
+      const panel = event.target.closest<HTMLElement>('.reader-side-page');
       if (panel) closeTopicalGuidePanelsAfter(Number(panel.dataset.panelIndex));
     }
   }
@@ -637,24 +707,42 @@
       panelIndex={0}
       primary
       onOpenRelatedTopic={(title) => openRelatedTopicalGuide(title, 0)}
+      onOpenScriptureReference={(book, chapterNumber, verseNumber) =>
+        openTopicalGuideScriptureReference(book, chapterNumber, verseNumber, 0)}
     />
   {/if}
 
   {#each relatedTopicalGuidePanels as panel, index (panel.key)}
-    <TopicalGuidePage
-      title={panel.title}
-      topic={panel.topic}
-      isLoading={panel.isLoading}
-      errorMessage={panel.errorMessage}
-      compact={topicalGuidePanelCount >= 2}
-      threeColumn={topicalGuidePanelCount >= 3}
-      hidden={
-        panel.isClosing ||
-        (topicalGuidePanelCount >= 3 && index + 1 < topicalGuidePanelCount - 3)
-      }
-      panelIndex={index + 1}
-      onOpenRelatedTopic={(title) => openRelatedTopicalGuide(title, index + 1)}
-    />
+    {@const panelHidden =
+      panel.isClosing ||
+      (topicalGuidePanelCount >= 3 && index + 1 < topicalGuidePanelCount - 3)}
+    {#if panel.kind === 'topic'}
+      <TopicalGuidePage
+        title={panel.title}
+        topic={panel.topic}
+        isLoading={panel.isLoading}
+        errorMessage={panel.errorMessage}
+        compact={topicalGuidePanelCount >= 2}
+        threeColumn={topicalGuidePanelCount >= 3}
+        hidden={panelHidden}
+        panelIndex={index + 1}
+        onOpenRelatedTopic={(title) => openRelatedTopicalGuide(title, index + 1)}
+        onOpenScriptureReference={(book, chapterNumber, verseNumber) =>
+          openTopicalGuideScriptureReference(book, chapterNumber, verseNumber, index + 1)}
+      />
+    {:else}
+      <ScriptureReferencePage
+        title={panel.title}
+        chapter={panel.chapter}
+        verse={panel.verse}
+        isLoading={panel.isLoading}
+        errorMessage={panel.errorMessage}
+        compact={topicalGuidePanelCount >= 2}
+        threeColumn={topicalGuidePanelCount >= 3}
+        hidden={panelHidden}
+        panelIndex={index + 1}
+      />
+    {/if}
   {/each}
 </div>
 
