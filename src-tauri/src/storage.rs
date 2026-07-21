@@ -11,6 +11,24 @@ pub(crate) const USER_DATA_DB_FILE: &str = "open-scriptures-study.db";
 pub(crate) struct ChapterVerse {
     pub number: i64,
     pub text: String,
+    pub topic_links: Vec<TopicalGuideLink>,
+}
+
+#[derive(Serialize)]
+pub(crate) struct TopicalGuideLink {
+    pub topic_id: i64,
+    pub title: String,
+    pub start_offset: i64,
+    pub end_offset: i64,
+}
+
+#[derive(Serialize)]
+pub(crate) struct TopicalGuideTopic {
+    pub id: i64,
+    pub title: String,
+    pub related_topics: String,
+    pub content: String,
+    pub source_page: i64,
 }
 
 #[derive(Serialize)]

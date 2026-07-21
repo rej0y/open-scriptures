@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount, tick } from 'svelte';
   import ChapterView from '$lib/ChapterView.svelte';
+  import TopicalGuidePage from '$lib/TopicalGuidePage.svelte';
   import {
     type ChapterBookmark,
     type ChapterNote,
@@ -11,11 +12,14 @@
     type ScriptureBook,
     type ScriptureChapter,
     type ScriptureSearchResult,
-    type SelectionPart
+    type SelectionPart,
+    type TopicalGuideLink,
+    type TopicalGuideTopic
   } from '$lib/study';
   import {
     loadBooks,
     loadChapter as fetchChapter,
+    loadTopicalGuideTopic,
     loadBookmarks as fetchBookmarks,
     loadSavedWords as fetchSavedWords,
     removeSavedHighlight as removeSavedHighlightRemote,
@@ -70,6 +74,11 @@
   let carouselSettleTimer: number | undefined;
   let hasCenteredCarousel = false;
   let activeChapterSlideHeight: number | undefined;
+  let selectedTopicLink: TopicalGuideLink | null = null;
+  let topicalGuideTopic: TopicalGuideTopic | null = null;
+  let topicalGuideError = '';
+  let isLoadingTopicalGuide = false;
+  let topicalGuideRequest = 0;
   let noteSaveTimer: number | undefined;
   const pendingNoteSaves = new Map<string, ChapterNote[]>();
 
@@ -372,6 +381,25 @@
     }
   }
 
+  async function openTopicalGuide(topicLink: TopicalGuideLink) {
+    const request = ++topicalGuideRequest;
+    selectedTopicLink = topicLink;
+    topicalGuideTopic = null;
+    topicalGuideError = '';
+    isLoadingTopicalGuide = true;
+
+    try {
+      const topic = await loadTopicalGuideTopic(topicLink.topic_id);
+      if (request === topicalGuideRequest) topicalGuideTopic = topic;
+    } catch (error) {
+      if (request === topicalGuideRequest) {
+        topicalGuideError = error instanceof Error ? error.message : String(error);
+      }
+    } finally {
+      if (request === topicalGuideRequest) isLoadingTopicalGuide = false;
+    }
+  }
+
   onMount(async () => {
     try {
       await readerActions.bootstrap(selectedBook, selectedChapter);
@@ -401,62 +429,76 @@
   on:pagehide={flushPendingChapterNotes}
 />
 
-<main
-  bind:this={carouselViewport}
-  class="reader-shell chapter-carousel-viewport"
-  class:carousel-recentering={isCarouselRecentering}
-  style:height={activeChapterSlideHeight ? `${activeChapterSlideHeight}px` : undefined}
-  on:scroll={handleCarouselScroll}
->
-  <div class="chapter-carousel">
-    <div class="chapter-slide">
-      {#if previousChapterPreview}
+<div class="reader-layout">
+  <main
+    bind:this={carouselViewport}
+    class="reader-shell chapter-carousel-viewport"
+    class:carousel-recentering={isCarouselRecentering}
+    style:height={activeChapterSlideHeight ? `${activeChapterSlideHeight}px` : undefined}
+    on:scroll={handleCarouselScroll}
+  >
+    <div class="chapter-carousel">
+      <div class="chapter-slide">
+        {#if previousChapterPreview}
+          <ChapterView
+            bind:activeHighlightId
+            chapter={previousChapterPreview}
+            totalVerses={previousChapterPreview.verses.length}
+            verseSegments={(verse) => verseSegmentsForChapter(previousChapterPreview, verse, savedWordsByVerse)}
+            {highlightId}
+            {highlightKey}
+            onRemoveHighlight={removeHighlightOnDoubleClick}
+            onOpenTopicalGuide={openTopicalGuide}
+          />
+        {/if}
+      </div>
+
+      <div class="chapter-slide" use:measureActiveChapterSlide>
         <ChapterView
           bind:activeHighlightId
-          chapter={previousChapterPreview}
-          totalVerses={previousChapterPreview.verses.length}
-          verseSegments={(verse) => verseSegmentsForChapter(previousChapterPreview, verse, savedWordsByVerse)}
+          {chapter}
+          isLoading={isLoading}
+          errorMessage={errorMessage}
+          totalVerses={totalVerses}
+          verseSegments={(verse) => verseSegmentsForChapter(chapter, verse, savedWordsByVerse)}
           {highlightId}
           {highlightKey}
           onRemoveHighlight={removeHighlightOnDoubleClick}
+          onOpenTopicalGuide={openTopicalGuide}
+          notes={chapterNotes}
+          onCreateNote={createChapterNote}
+          onUpdateNote={updateChapterNote}
+          onUpdateNoteLayout={updateChapterNoteLayout}
+          onRemoveNotes={removeChapterNotes}
         />
-      {/if}
-    </div>
+      </div>
 
-    <div class="chapter-slide" use:measureActiveChapterSlide>
-      <ChapterView
-        bind:activeHighlightId
-        {chapter}
-        isLoading={isLoading}
-        errorMessage={errorMessage}
-        totalVerses={totalVerses}
-        verseSegments={(verse) => verseSegmentsForChapter(chapter, verse, savedWordsByVerse)}
-        {highlightId}
-        {highlightKey}
-        onRemoveHighlight={removeHighlightOnDoubleClick}
-        notes={chapterNotes}
-        onCreateNote={createChapterNote}
-        onUpdateNote={updateChapterNote}
-        onUpdateNoteLayout={updateChapterNoteLayout}
-        onRemoveNotes={removeChapterNotes}
-      />
+      <div class="chapter-slide">
+        {#if nextChapterPreview}
+        <ChapterView
+            bind:activeHighlightId
+            chapter={nextChapterPreview}
+            totalVerses={nextChapterPreview.verses.length}
+            verseSegments={(verse) => verseSegmentsForChapter(nextChapterPreview, verse, savedWordsByVerse)}
+            {highlightId}
+            {highlightKey}
+            onRemoveHighlight={removeHighlightOnDoubleClick}
+            onOpenTopicalGuide={openTopicalGuide}
+          />
+        {/if}
+      </div>
     </div>
+  </main>
 
-    <div class="chapter-slide">
-      {#if nextChapterPreview}
-      <ChapterView
-          bind:activeHighlightId
-          chapter={nextChapterPreview}
-          totalVerses={nextChapterPreview.verses.length}
-          verseSegments={(verse) => verseSegmentsForChapter(nextChapterPreview, verse, savedWordsByVerse)}
-          {highlightId}
-          {highlightKey}
-          onRemoveHighlight={removeHighlightOnDoubleClick}
-        />
-      {/if}
-    </div>
-  </div>
-</main>
+  {#if selectedTopicLink}
+    <TopicalGuidePage
+      title={selectedTopicLink.title}
+      topic={topicalGuideTopic}
+      isLoading={isLoadingTopicalGuide}
+      errorMessage={topicalGuideError}
+    />
+  {/if}
+</div>
 
 {#if selectionOverlayRects.length > 0}
   <div class="selection-overlay" aria-hidden="true">
@@ -505,6 +547,13 @@
     overflow-x: clip;
   }
 
+  .reader-layout {
+    display: flex;
+    align-items: flex-start;
+    width: 100%;
+    min-width: 0;
+  }
+
   .reader-shell {
     --shell-padding: clamp(1rem, 3vw, 2.25rem);
     --shell-max-width: 900px;
@@ -535,6 +584,9 @@
   }
 
   .chapter-carousel-viewport {
+    flex: 1 1 auto;
+    width: auto;
+    min-width: 0;
     padding: 0;
     overflow-x: auto;
     overflow-y: clip;

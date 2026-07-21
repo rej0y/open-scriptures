@@ -9,7 +9,8 @@ The goal is to build a local-first desktop app that can eventually support advan
 - Local desktop app built with Tauri, SvelteKit, Rust, and SQLite
 - Scripture database bundled as a local read-only resource
 - Book and chapter navigation
-- Previous and next chapter controls
+- Swipe-based previous and next chapter navigation
+- Underlined topical-guide words with a reference side page
 - Scripture search with clickable results
 - Chapter bookmarks
 - Saved word selections stored in local app data
@@ -45,6 +46,7 @@ If you are not using Nix, install the equivalent local toolchain:
 - Rust stable
 - Tauri CLI and Linux desktop dependencies for Tauri 2
 - SQLite tooling, useful for inspecting the bundled database
+- Poppler's `pdftohtml`, used to rebuild topical-guide data from the root PDF
 
 ## Running the App
 
@@ -74,6 +76,13 @@ Build the frontend:
 
 ```bash
 npm run build
+```
+
+Rebuild the bundled topical-guide tables and verse links from
+`study_helps_topical_guide.pdf`:
+
+```bash
+npm run import:topical-guide
 ```
 
 Check the Rust/Tauri backend:

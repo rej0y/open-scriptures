@@ -22,8 +22,12 @@ const chapter: ScriptureChapter = {
   next_chapter: 3,
   reference: '1 Nephi 2',
   verses: [
-    { number: 1, text: 'Alpha beta gamma.' },
-    { number: 2, text: 'Delta epsilon zeta.' }
+    {
+      number: 1,
+      text: 'Alpha beta gamma.',
+      topic_links: [{ topic_id: 7, title: 'Alpha', start_offset: 0, end_offset: 5 }]
+    },
+    { number: 2, text: 'Delta epsilon zeta.', topic_links: [] }
   ]
 };
 
@@ -89,7 +93,11 @@ test('verseSegmentsForChapter splits and annotates highlighted text', () => {
   });
 
   assert.deepStrictEqual(segments, [
-    { text: 'Alpha ' },
+    {
+      text: 'Alpha',
+      topicLink: { topic_id: 7, title: 'Alpha', start_offset: 0, end_offset: 5 }
+    },
+    { text: ' ' },
     { text: 'beta', savedWord: savedWords[0] },
     { text: ' gamma.' }
   ]);

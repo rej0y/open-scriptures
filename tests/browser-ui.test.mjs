@@ -235,8 +235,12 @@ function buildMockInvokeSource() {
         next_chapter: 2,
         reference: '1 Nephi 1',
         verses: [
-          { number: 1, text: 'I, Nephi, having been born of goodly parents.' },
-          { number: 2, text: 'And I make a record of my proceedings.' }
+          {
+            number: 1,
+            text: 'I, Nephi, having been born of goodly parents.',
+            topic_links: [{ topic_id: 1, title: 'Nephi', start_offset: 3, end_offset: 8 }]
+          },
+          { number: 2, text: 'And I make a record of my proceedings.', topic_links: [] }
         ]
       },
       '1 Nephi:2': {
@@ -247,7 +251,7 @@ function buildMockInvokeSource() {
         next_chapter: null,
         reference: '1 Nephi 2',
         verses: [
-          { number: 1, text: 'And it came to pass that the Lord spake unto me.' }
+          { number: 1, text: 'And it came to pass that the Lord spake unto me.', topic_links: [] }
         ]
       },
       '2 Nephi:1': {
@@ -258,7 +262,7 @@ function buildMockInvokeSource() {
         next_chapter: null,
         reference: '2 Nephi 1',
         verses: [
-          { number: 1, text: 'Behold, it came to pass that I, Nephi, did give.' }
+          { number: 1, text: 'Behold, it came to pass that I, Nephi, did give.', topic_links: [] }
         ]
       }
     },
@@ -316,6 +320,14 @@ function buildMockInvokeSource() {
             if (!chapter) throw new Error(\`Missing chapter for \${key}\`);
             return structuredClone(chapter);
           }
+          case 'get_topical_guide_topic':
+            return {
+              id: Number(args.topicId),
+              title: 'Nephi',
+              related_topics: 'See also Book of Mormon; Prophets',
+              content: '1 Ne. 1:1 I, Nephi, having been born of goodly parents.',
+              source_page: 321
+            };
           case 'search_scriptures': {
             const query = String(args.query ?? '').toLowerCase();
             if (query.includes('nephi')) {
@@ -658,6 +670,58 @@ test('carousel height follows the visible chapter', async (t) => {
   );
 
   assert(Math.abs(dimensions.viewportHeight - dimensions.chapterHeight) < 1, JSON.stringify(dimensions));
+});
+
+test('topical guide words are underlined and open the side page', async (t) => {
+  const harness = await createHarness();
+  t.after(async () => {
+    await harness.close();
+  });
+
+  const topicSelector = '.chapter-slide:nth-child(2) .topical-guide-link[data-topic-id="1"]';
+  assert.equal(
+    await evaluate(
+      harness.client,
+      `getComputedStyle(document.querySelector(${JSON.stringify(topicSelector)})).textDecorationLine`
+    ),
+    'underline'
+  );
+  assert.equal(
+    await evaluate(
+      harness.client,
+      `getComputedStyle(document.querySelector(${JSON.stringify(topicSelector)})).textDecorationColor`
+    ),
+    'rgb(0, 0, 0)'
+  );
+
+  await clickSelector(harness.client, topicSelector);
+  await waitFor(
+    harness.client,
+    async () => (await getText(harness.client, '.topical-guide-page h2')) === 'Nephi'
+  );
+  assert.match(await getText(harness.client, '.topical-guide-page .topic-content'), /1 Ne\. 1:1/);
+
+  const paneLayout = await evaluate(
+    harness.client,
+    `(() => {
+      const main = document.querySelector('.chapter-carousel-viewport').getBoundingClientRect();
+      const panel = document.querySelector('.topical-guide-page').getBoundingClientRect();
+      return { mainRight: main.right, panelLeft: panel.left, panelRight: panel.right };
+    })()`
+  );
+  assert(paneLayout.mainRight <= paneLayout.panelLeft + 1, JSON.stringify(paneLayout));
+  assert(paneLayout.panelRight <= 800, JSON.stringify(paneLayout));
+  assert.equal(
+    await evaluate(harness.client, 'getComputedStyle(document.querySelector(".topical-guide-page")).boxShadow'),
+    'none'
+  );
+  assert.equal(
+    await evaluate(harness.client, 'document.querySelectorAll(".topical-guide-page .close-button").length'),
+    0
+  );
+
+  const commands = await getCallCommands(harness.client);
+  assert(commands.includes('get_topical_guide_topic'));
 });
 
 test('chapter text enters inline editing and persists modified text', async (t) => {

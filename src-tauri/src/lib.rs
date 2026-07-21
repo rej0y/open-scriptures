@@ -3,8 +3,8 @@ mod logging;
 mod storage;
 
 use commands::{
-    get_chapter, list_books, list_bookmarks, list_saved_words, remove_bookmark, remove_saved_word,
-    save_bookmark, save_word, search_scriptures,
+    get_chapter, get_topical_guide_topic, list_bookmarks, list_books, list_saved_words,
+    remove_bookmark, remove_saved_word, save_bookmark, save_word, search_scriptures,
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -19,6 +19,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             list_books,
             get_chapter,
+            get_topical_guide_topic,
             search_scriptures,
             list_bookmarks,
             list_saved_words,

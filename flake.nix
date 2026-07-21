@@ -40,6 +40,7 @@
           toolchain
           pkgs.cargo-tauri
           pkgs.nodejs_22
+          pkgs.poppler-utils
           pkgs.pkg-config
           pkgs.sqlite
         ] ++ tauriNativeDeps ++ gstreamerDeps;

@@ -4,7 +4,8 @@ import type {
   SavedWord,
   ScriptureBook,
   ScriptureChapter,
-  ScriptureSearchResult
+  ScriptureSearchResult,
+  TopicalGuideTopic
 } from '$lib/study';
 import { invoke } from '$lib/tauriBridge';
 
@@ -21,6 +22,10 @@ export function loadChapter(bookTitle: string, chapterNumber: number) {
 
 export function searchScriptures(query: string) {
   return invoke<ScriptureSearchResult[]>('search_scriptures', { query });
+}
+
+export function loadTopicalGuideTopic(topicId: number) {
+  return invoke<TopicalGuideTopic>('get_topical_guide_topic', { topicId });
 }
 
 export function loadSavedWords() {

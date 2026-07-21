@@ -1,7 +1,8 @@
 use crate::storage::{
     open_scriptures_connection, ChapterVerse, ScriptureBook, ScriptureChapter,
-    ScriptureSearchResult,
+    ScriptureSearchResult, TopicalGuideLink,
 };
+use std::collections::HashMap;
 use tracing::{error, info};
 
 fn log_command_error(context: &str, error: impl std::fmt::Display) -> String {
@@ -94,7 +95,7 @@ pub(crate) fn get_chapter(
     let mut statement = connection
         .prepare(
             "
-            select verse_number, scripture_text
+            select verse_id, verse_number, scripture_text
             from scriptures
             where book_title = ?1 and chapter_number = ?2
             order by verse_number
@@ -102,16 +103,68 @@ pub(crate) fn get_chapter(
         )
         .map_err(|error| log_command_error("Could not prepare verse query", error))?;
 
-    let verses = statement
+    let verse_rows = statement
         .query_map((&book, chapter_number), |row| {
-            Ok(ChapterVerse {
-                number: row.get(0)?,
-                text: row.get(1)?,
-            })
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, i64>(1)?,
+                row.get::<_, String>(2)?,
+            ))
         })
         .map_err(|error| log_command_error("Could not query verses", error))?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|error| log_command_error("Could not read verses", error))?;
+
+    let mut topic_links_by_verse: HashMap<i64, Vec<TopicalGuideLink>> = HashMap::new();
+    let mut topic_statement = connection
+        .prepare(
+            "
+            select
+              links.verse_id,
+              topics.id,
+              topics.title,
+              links.start_offset,
+              links.end_offset
+            from verse_topical_guide_links links
+            inner join topical_guide_topics topics on topics.id = links.topic_id
+            inner join scriptures on scriptures.verse_id = links.verse_id
+            where scriptures.book_title = ?1 and scriptures.chapter_number = ?2
+            order by links.verse_id, links.start_offset, links.end_offset desc
+            ",
+        )
+        .map_err(|error| log_command_error("Could not prepare topical guide links query", error))?;
+
+    let topic_rows = topic_statement
+        .query_map((&book, chapter_number), |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                TopicalGuideLink {
+                    topic_id: row.get(1)?,
+                    title: row.get(2)?,
+                    start_offset: row.get(3)?,
+                    end_offset: row.get(4)?,
+                },
+            ))
+        })
+        .map_err(|error| log_command_error("Could not query topical guide links", error))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| log_command_error("Could not read topical guide links", error))?;
+
+    for (verse_id, topic_link) in topic_rows {
+        topic_links_by_verse
+            .entry(verse_id)
+            .or_default()
+            .push(topic_link);
+    }
+
+    let verses = verse_rows
+        .into_iter()
+        .map(|(verse_id, number, text)| ChapterVerse {
+            number,
+            text,
+            topic_links: topic_links_by_verse.remove(&verse_id).unwrap_or_default(),
+        })
+        .collect();
 
     chapter.previous_chapter = (chapter.chapter > 1).then_some(chapter.chapter - 1);
     chapter.next_chapter = (chapter.chapter < chapter_count).then_some(chapter.chapter + 1);

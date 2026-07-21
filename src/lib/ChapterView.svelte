@@ -5,6 +5,7 @@
     ChapterVerse,
     SavedWord,
     ScriptureChapter,
+    TopicalGuideLink,
     VerseSegment
   } from '$lib/study';
 
@@ -18,6 +19,7 @@
   export let highlightId = (_word: SavedWord) => '';
   export let highlightKey = (_word: SavedWord) => '';
   export let onRemoveHighlight = async (_word: SavedWord) => {};
+  export let onOpenTopicalGuide = (_topicLink: TopicalGuideLink) => {};
   export let onCreateNote = (_note: ChapterNote) => {};
   type NoteLayout = Pick<ChapterNote, 'x' | 'y' | 'width' | 'height' | 'manualWidth'>;
   type NoteRect = { left: number; top: number; width: number; height: number };
@@ -895,7 +897,26 @@
               on:dblclick={(event) => startVerseEdit(event, verse)}
               on:blur={(event) => finishVerseEdit(verse, event.currentTarget)}
               on:keydown={(event) => handleVerseEditKeydown(event, verse)}
-                >{#if editingVerseNumber === verse.number || isVerseModified}{verseText(verse)}{:else}{#each verseSegments(verse) as segment}{#if segment.savedWord}
+                >{#if editingVerseNumber === verse.number || isVerseModified}{verseText(verse)}{:else}{#each verseSegments(verse) as segment}{#if segment.topicLink}
+                    <button
+                      class="topical-guide-link"
+                      type="button"
+                      title={`Open ${segment.topicLink.title} in the Topical Guide`}
+                      data-topic-id={segment.topicLink.topic_id}
+                      on:click|stopPropagation={() => onOpenTopicalGuide(segment.topicLink!)}
+                      on:dblclick|stopPropagation
+                    >{#if segment.savedWord}<mark
+                        class="highlight-mark"
+                        class:highlight-mark-active={activeHighlightId === highlightId(segment.savedWord)}
+                        title="Double-click to remove highlight"
+                        data-highlight-key={highlightKey(segment.savedWord)}
+                        data-highlight-id={highlightId(segment.savedWord)}
+                        on:pointerup|stopPropagation
+                        on:mouseup|stopPropagation
+                        on:touchend|stopPropagation
+                        on:dblclick|preventDefault|stopPropagation={() => onRemoveHighlight(segment.savedWord!)}
+                      >{segment.text}</mark>{:else}{segment.text}{/if}</button>
+                  {:else if segment.savedWord}
                     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
                     <mark
                       class="highlight-mark"
@@ -1110,6 +1131,34 @@
 
   .highlight-mark-active {
     background: rgba(227, 178, 75, 0.58);
+  }
+
+  .topical-guide-link {
+    appearance: none;
+    display: inline;
+    border: 0;
+    border-radius: 2px;
+    padding: 0;
+    color: inherit;
+    background: transparent;
+    font: inherit;
+    line-height: inherit;
+    text-align: inherit;
+    text-decoration: underline;
+    text-decoration-color: #000;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.16em;
+    cursor: pointer;
+  }
+
+  .topical-guide-link:hover {
+    color: #235f57;
+    text-decoration-thickness: 2px;
+  }
+
+  .topical-guide-link:focus-visible {
+    outline: 2px solid var(--accent-color);
+    outline-offset: 2px;
   }
 
   .verse-number {

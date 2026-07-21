@@ -7,6 +7,7 @@ import {
   type SavedWord,
   type ScriptureBook,
   type ScriptureChapter,
+  type ChapterVerse,
   type VerseSegment
 } from '$lib/study';
 
@@ -43,44 +44,40 @@ export function cloneChapter(chapter: ScriptureChapter | null) {
 
 export function verseSegmentsForChapter(
   chapter: ScriptureChapter | null,
-  verse: { number: number; text: string },
+  verse: ChapterVerse,
   savedWordsByVerse: Record<string, SavedWord[]>
 ): VerseSegment[] {
   if (!chapter) return [{ text: verse.text }];
 
   const key = passageKey(chapter.book, chapter.chapter, verse.number);
-  const ranges = (savedWordsByVerse[key] ?? [])
+  const savedRanges = (savedWordsByVerse[key] ?? [])
     .filter((word) => word.start_offset >= 0 && word.end_offset > word.start_offset)
     .sort((first, second) => first.start_offset - second.start_offset);
+  const topicRanges = verse.topic_links ?? [];
+  const verseLength = textLength(verse.text);
+  const boundaries = new Set([0, verseLength]);
 
-  if (ranges.length === 0) {
-    return [{ text: verse.text }];
+  for (const range of [...savedRanges, ...topicRanges]) {
+    boundaries.add(Math.max(0, Math.min(range.start_offset, verseLength)));
+    boundaries.add(Math.max(0, Math.min(range.end_offset, verseLength)));
   }
 
-  const segments: VerseSegment[] = [];
-  let lastIndex = 0;
+  const offsets = [...boundaries].sort((first, second) => first - second);
+  return offsets.slice(0, -1).flatMap((start, index) => {
+    const end = offsets[index + 1];
+    if (end <= start) return [];
 
-  for (const range of ranges) {
-    const start = Math.max(range.start_offset, lastIndex);
-    const end = Math.min(range.end_offset, textLength(verse.text));
-
-    if (end <= start) {
-      continue;
-    }
-
-    if (start > lastIndex) {
-      segments.push({ text: textSlice(verse.text, lastIndex, start) });
-    }
-
-    segments.push({ text: textSlice(verse.text, start, end), savedWord: range });
-    lastIndex = end;
-  }
-
-  if (lastIndex < textLength(verse.text)) {
-    segments.push({ text: textSlice(verse.text, lastIndex) });
-  }
-
-  return segments;
+    const segment: VerseSegment = { text: textSlice(verse.text, start, end) };
+    const savedWord = savedRanges.find(
+      (range) => range.start_offset <= start && range.end_offset >= end
+    );
+    const topicLink = topicRanges.find(
+      (range) => range.start_offset <= start && range.end_offset >= end
+    );
+    if (savedWord) segment.savedWord = savedWord;
+    if (topicLink) segment.topicLink = topicLink;
+    return [segment];
+  });
 }
 
 export function deriveReaderViewState(

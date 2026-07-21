@@ -12,6 +12,7 @@
     "test": "svelte-kit sync && npm run test:build && node --test --loader ./tests/node-test-loader.mjs .test-dist/tests/*.test.js && npm run test:browser",
     "test:build": "tsc -p tsconfig.test.json",
     "test:browser": "node --test ./tests/browser-ui.test.mjs",
+    "import:topical-guide": "node ./scripts/import-topical-guide.mjs",
     "tauri": "tauri"
   },
   "dependencies": {
