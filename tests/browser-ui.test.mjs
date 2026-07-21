@@ -326,7 +326,7 @@ function buildMockInvokeSource() {
               title: 'Nephi',
               related_topics: 'See also Book of Mormon; Mys- teries of Godliness; BD Missing',
               content:
-                '1 Ne. 1:1 I, Nephi,\\nhaving been born of goodly parents; 1 Ne. 1:2 Yea, I make a record.',
+                '1 Ne. 1:1 I, Nephi,\\nhaving been born of goodly parents.\\n1 Ne. 1:2 Yea, I make a record; the record is true; 2:1 And I went forth.',
               source_page: 321
             };
           case 'get_topical_guide_topic_by_title':
@@ -758,11 +758,47 @@ test('topical guide words are underlined and open the side page', async (t) => {
       harness.client,
       'document.querySelectorAll(".topical-guide-page .reference-list p").length'
     ),
-    2
+    3
   );
   assert.match(
     await getText(harness.client, '.topical-guide-page .reference-list p'),
     /Nephi, having been born/
+  );
+  assert.match(
+    await getText(harness.client, '.topical-guide-page .reference-list p:nth-child(2)'),
+    /record; the record is true/
+  );
+
+  assert.equal(
+    await evaluate(
+      harness.client,
+      `(() => {
+        const panel = document.querySelector('.topical-guide-page');
+        document.querySelector('.reference-list').style.minHeight = '1800px';
+        panel.scrollTop = panel.scrollHeight;
+        return panel.scrollTop > 0;
+      })()`
+    ),
+    true
+  );
+  await clickSelector(harness.client, topicSelector);
+  await waitFor(
+    harness.client,
+    async () => (await getText(harness.client, '.topical-guide-page h2')) === 'Nephi'
+  );
+  await delay(300);
+  assert.deepEqual(
+    await evaluate(
+      harness.client,
+      `(() => {
+        const panel = document.querySelector('.topical-guide-page');
+        return {
+          hidden: panel.classList.contains('panel-hidden'),
+          scrollTop: panel.scrollTop
+        };
+      })()`
+    ),
+    { hidden: false, scrollTop: 0 }
   );
 
   const paneLayout = await evaluate(
@@ -818,7 +854,7 @@ test('topical guide words are underlined and open the side page', async (t) => {
       harness.client,
       'Array.from(document.querySelectorAll(".scripture-reference-button"), (button) => button.textContent)'
     ),
-    ['1 Ne. 1:1', '1 Ne. 1:2']
+    ['1 Ne. 1:1', '1 Ne. 1:2', '1 Ne. 2:1']
   );
 
   await clickSelector(

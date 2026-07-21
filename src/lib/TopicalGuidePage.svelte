@@ -1,5 +1,6 @@
 <script lang="ts">
-  import type { TopicalGuideTopic } from '$lib/study';
+  import { tick } from 'svelte';
+  import type { ScriptureBook, TopicalGuideTopic } from '$lib/study';
 
   export let title = '';
   export let topic: TopicalGuideTopic | null = null;
@@ -10,8 +11,21 @@
   export let hidden = false;
   export let panelIndex = 0;
   export let primary = false;
+  export let scriptureBooks: ScriptureBook[] = [];
   export let onOpenRelatedTopic = (_title: string) => {};
   export let onOpenScriptureReference = (_book: string, _chapter: number, _verse: number) => {};
+  let panelElement: HTMLElement;
+  let renderedTopicKey = '';
+
+  $: {
+    const nextTopicKey = `${title}:${topic?.id ?? 'loading'}`;
+    if (nextTopicKey !== renderedTopicKey) {
+      renderedTopicKey = nextTopicKey;
+      void tick().then(() => {
+        if (panelElement) panelElement.scrollTop = 0;
+      });
+    }
+  }
 
   function splitTopLevelEntries(value: string) {
     const entries: string[] = [];
@@ -39,17 +53,138 @@
     return entries;
   }
 
-  function referenceParts(entry: string) {
-    const match = entry.match(/^(.+?)\s+(\d+):(\d+)(?:[-–,]\d+)*/);
-    if (!match) return null;
+  function escapedPattern(value: string) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
 
-    return {
-      citation: match[0],
-      book: match[1],
-      chapter: Number(match[2]),
-      verse: Number(match[3]),
-      description: entry.slice(match[0].length)
-    };
+  function bookAliases() {
+    return scriptureBooks
+      .flatMap((book) => [
+        { label: book.title, book: book.title },
+        { label: book.short_title, book: book.title }
+      ])
+      .filter((alias, index, aliases) =>
+        aliases.findIndex((candidate) => candidate.label === alias.label) === index
+      )
+      .sort((left, right) => right.label.length - left.label.length);
+  }
+
+  function explicitReference(value: string) {
+    for (const alias of bookAliases()) {
+      const match = value.match(
+        new RegExp(`^${escapedPattern(alias.label)}\\s+(\\d+):(\\d+)(?:[-–,]\\d+)*`, 'i')
+      );
+      if (match) {
+        return {
+          citation: match[0],
+          book: alias.book,
+          bookLabel: alias.label,
+          chapter: Number(match[1]),
+          verse: Number(match[2]),
+          length: match[0].length
+        };
+      }
+    }
+    return null;
+  }
+
+  function startsWithExplicitReference(value: string) {
+    return Boolean(explicitReference(value.replace(/^See also\s+/i, '')));
+  }
+
+  function startsWithReference(value: string) {
+    const content = value.replace(/^See also\s+/i, '');
+    return startsWithExplicitReference(value) || /^\d+:\d+/.test(content);
+  }
+
+  function splitReferenceBlock(value: string) {
+    const entries: string[] = [];
+    let entry = '';
+    let parenthesisDepth = 0;
+
+    function appendEntry() {
+      const normalizedEntry = entry.replace(/\s+/g, ' ').trim();
+      if (normalizedEntry) entries.push(normalizedEntry);
+      entry = '';
+    }
+
+    for (let index = 0; index < value.length; index += 1) {
+      const character = value[index];
+      if (character === '(') parenthesisDepth += 1;
+      if (character === ')') parenthesisDepth = Math.max(0, parenthesisDepth - 1);
+
+      if (
+        character === ';' &&
+        parenthesisDepth === 0 &&
+        startsWithReference(value.slice(index + 1).trimStart())
+      ) {
+        appendEntry();
+      } else {
+        entry += character;
+      }
+    }
+
+    appendEntry();
+    return entries;
+  }
+
+  function splitReferenceEntries(value: string) {
+    const blocks: string[] = [];
+    let block = '';
+
+    for (const sourceLine of value.replace(/\r/g, '').split('\n')) {
+      const line = sourceLine.trim();
+      if (!line) continue;
+
+      if (block && startsWithExplicitReference(line)) {
+        blocks.push(block);
+        block = line;
+      } else {
+        block += `${block ? ' ' : ''}${line}`;
+      }
+    }
+    if (block) blocks.push(block);
+
+    return blocks.flatMap(splitReferenceBlock);
+  }
+
+  function parseReferenceEntries(value: string) {
+    let inheritedBook: { book: string; label: string } | null = null;
+
+    return splitReferenceEntries(value).map((entry) => {
+      const prefixMatch = entry.match(/^See also\s+/i);
+      const prefix = prefixMatch?.[0] ?? '';
+      const content = entry.slice(prefix.length);
+      const explicit = explicitReference(content);
+
+      if (explicit) {
+        inheritedBook = { book: explicit.book, label: explicit.bookLabel };
+        return {
+          raw: entry,
+          prefix,
+          citation: explicit.citation,
+          book: explicit.book,
+          chapter: explicit.chapter,
+          verse: explicit.verse,
+          description: content.slice(explicit.length)
+        };
+      }
+
+      const shorthand = content.match(/^(\d+):(\d+)(?:[-–,]\d+)*/);
+      if (shorthand && inheritedBook) {
+        return {
+          raw: entry,
+          prefix,
+          citation: `${inheritedBook.label} ${shorthand[0]}`,
+          book: inheritedBook.book,
+          chapter: Number(shorthand[1]),
+          verse: Number(shorthand[2]),
+          description: content.slice(shorthand[0].length)
+        };
+      }
+
+      return { raw: entry };
+    });
   }
 
   function repairPdfWordBreaks(value: string) {
@@ -61,10 +196,11 @@
         repairPdfWordBreaks
       )
     : [];
-  $: referenceEntries = topic?.content ? splitTopLevelEntries(topic.content) : [];
+  $: referenceEntries = topic?.content ? parseReferenceEntries(topic.content) : [];
 </script>
 
 <aside
+  bind:this={panelElement}
   class="topical-guide-page reader-side-page"
   class:compact
   class:three-column={threeColumn}
@@ -109,21 +245,21 @@
         <h3>Scripture references</h3>
         <div class="reference-list">
           {#each referenceEntries as referenceEntry}
-            {@const reference = referenceParts(referenceEntry)}
             <p>
-              {#if reference}
+              {#if referenceEntry.citation}
+                {referenceEntry.prefix}
                 <button
                   class="scripture-reference-button"
                   type="button"
                   on:click={() =>
                     onOpenScriptureReference(
-                      reference.book,
-                      reference.chapter,
-                      reference.verse
+                      referenceEntry.book!,
+                      referenceEntry.chapter!,
+                      referenceEntry.verse!
                     )}
-                >{reference.citation}</button>{reference.description}
+                >{referenceEntry.citation}</button>{referenceEntry.description}
               {:else}
-                {referenceEntry}
+                {referenceEntry.raw}
               {/if}
             </p>
           {/each}

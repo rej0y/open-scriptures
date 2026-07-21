@@ -588,6 +588,13 @@
   }
 
   function closeTopicalGuideFromMainClick(event: MouseEvent) {
+    if (
+      event.target instanceof Element &&
+      event.target.closest('.topical-guide-link')
+    ) {
+      return;
+    }
+
     if (event.target instanceof Element && event.target.closest('.reader-scroll-viewport')) {
       closeTopicalGuide();
       return;
@@ -721,6 +728,7 @@
       }
       panelIndex={0}
       primary
+      scriptureBooks={books}
       onOpenRelatedTopic={(title) => openRelatedTopicalGuide(title, 0)}
       onOpenScriptureReference={(book, chapterNumber, verseNumber) =>
         openTopicalGuideScriptureReference(book, chapterNumber, verseNumber, 0)}
@@ -741,6 +749,7 @@
         threeColumn={topicalGuidePanelCount >= 3}
         hidden={panelHidden}
         panelIndex={index + 1}
+        scriptureBooks={books}
         onOpenRelatedTopic={(title) => openRelatedTopicalGuide(title, index + 1)}
         onOpenScriptureReference={(book, chapterNumber, verseNumber) =>
           openTopicalGuideScriptureReference(book, chapterNumber, verseNumber, index + 1)}
