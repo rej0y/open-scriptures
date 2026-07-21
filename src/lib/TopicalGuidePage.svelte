@@ -52,8 +52,14 @@
     };
   }
 
+  function repairPdfWordBreaks(value: string) {
+    return value.replace(/([\p{L}])-\s+(?=[\p{Ll}])/gu, '$1');
+  }
+
   $: relatedTopics = topic?.related_topics
-    ? splitTopLevelEntries(topic.related_topics.replace(/^See(?: also)?\s*/i, ''))
+    ? splitTopLevelEntries(topic.related_topics.replace(/^See(?: also)?\s*/i, '')).map(
+        repairPdfWordBreaks
+      )
     : [];
   $: referenceEntries = topic?.content ? splitTopLevelEntries(topic.content) : [];
 </script>

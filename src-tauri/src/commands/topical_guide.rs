@@ -1,6 +1,16 @@
 use crate::storage::{open_scriptures_connection, TopicalGuideTopic};
-use rusqlite::OptionalExtension;
+use rusqlite::{params, OptionalExtension};
 use tracing::{error, info};
+
+fn folded_topic_title(title: &str) -> String {
+    title
+        .chars()
+        .filter(|character| {
+            !character.is_whitespace() && *character != '-' && *character != '\u{ad}'
+        })
+        .flat_map(char::to_lowercase)
+        .collect()
+}
 
 #[tauri::command]
 pub(crate) fn get_topical_guide_topic(
@@ -75,13 +85,18 @@ pub(crate) fn get_topical_guide_topic_by_title(
             where title = ?1 collate nocase
                or normalized_title = lower(trim(?1))
                or normalized_title like lower(trim(?1)) || ',%'
+               or replace(replace(normalized_title, '-', ''), ' ', '') = ?2
+               or replace(replace(normalized_title, '-', ''), ' ', '') like ?2 || ',%'
+               or ?2 like replace(replace(normalized_title, '-', ''), ' ', '') || '%'
             order by
               title = ?1 collate nocase desc,
               normalized_title = lower(trim(?1)) desc,
+              replace(replace(normalized_title, '-', ''), ' ', '') = ?2 desc,
+              abs(length(replace(replace(normalized_title, '-', ''), ' ', '')) - length(?2)),
               length(title)
             limit 1
             ",
-                [candidate],
+                params![candidate, folded_topic_title(candidate)],
                 |row| {
                     Ok(TopicalGuideTopic {
                         id: row.get(0)?,
@@ -105,7 +120,36 @@ pub(crate) fn get_topical_guide_topic_by_title(
         }
     }
 
-    let message = format!("Topical Guide topic ‘{topic_title}’ is not available");
+    let message = format!("No matching Topical Guide topic for ‘{topic_title}’");
     error!(topic_title = %topic_title, "{message}");
     Err(message)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::folded_topic_title;
+
+    #[test]
+    fn folded_titles_remove_pdf_word_break_artifacts() {
+        assert_eq!(
+            folded_topic_title("Mys- teries of Godliness"),
+            folded_topic_title("Mysteries of Godliness")
+        );
+        assert_eq!(
+            folded_topic_title("Depend- a bility"),
+            folded_topic_title("Dependability")
+        );
+        assert_eq!(
+            folded_topic_title("False Doc- trine"),
+            folded_topic_title("False Doctrine")
+        );
+    }
+
+    #[test]
+    fn folded_titles_preserve_meaningful_punctuation() {
+        assert_ne!(
+            folded_topic_title("God, Love of"),
+            folded_topic_title("God Love of")
+        );
+    }
 }

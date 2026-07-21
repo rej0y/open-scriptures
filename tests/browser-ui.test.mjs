@@ -324,12 +324,15 @@ function buildMockInvokeSource() {
             return {
               id: Number(args.topicId),
               title: 'Nephi',
-              related_topics: 'See also Book of Mormon; Prophets',
+              related_topics: 'See also Book of Mormon; Mys- teries of Godliness; BD Missing',
               content:
                 '1 Ne. 1:1 I, Nephi,\\nhaving been born of goodly parents; 1 Ne. 1:2 Yea, I make a record.',
               source_page: 321
             };
           case 'get_topical_guide_topic_by_title':
+            if (String(args.topicTitle) === 'BD Missing') {
+              throw new Error('Topical Guide topic is not available');
+            }
             return {
               id: 2,
               title: String(args.topicTitle),
@@ -717,11 +720,34 @@ test('topical guide words are underlined and open the side page', async (t) => {
       harness.client,
       'document.querySelectorAll(".topical-guide-page .related-topics li").length'
     ),
-    2
+    3
   );
   assert.equal(
     await getText(harness.client, '.topical-guide-page .related-topics h3'),
     'See also'
+  );
+  assert.deepEqual(
+    await evaluate(
+      harness.client,
+      'Array.from(document.querySelectorAll(".topical-guide-page .related-topic-button"), (button) => button.textContent.trim())'
+    ),
+    ['Book of Mormon', 'Mysteries of Godliness', 'BD Missing']
+  );
+  await clickSelector(
+    harness.client,
+    '.topical-guide-page .related-topics li:nth-child(3) .related-topic-button'
+  );
+  await delay(150);
+  assert.equal(
+    await evaluate(harness.client, 'document.querySelectorAll(".reader-side-page").length'),
+    1
+  );
+  assert.equal(
+    await evaluate(
+      harness.client,
+      'document.body.textContent.toLocaleLowerCase().includes("is not available")'
+    ),
+    false
   );
   assert.equal(
     await getText(harness.client, '.topical-guide-page .topic-content h3'),
@@ -1036,6 +1062,17 @@ test('topical guide words are underlined and open the side page', async (t) => {
   await waitFor(
     harness.client,
     async () =>
+      (await evaluate(
+        harness.client,
+        `(() => {
+          const panel = document.querySelector('.topical-guide-page');
+          return Boolean(panel?.classList.contains('panel-hidden'));
+        })()`
+      )) === true
+  );
+  await waitFor(
+    harness.client,
+    async () =>
       (await evaluate(harness.client, 'document.querySelector(".topical-guide-page") === null')) === true
   );
 
@@ -1044,7 +1081,7 @@ test('topical guide words are underlined and open the side page', async (t) => {
   assert(commands.includes('get_topical_guide_topic_by_title'));
 });
 
-test('topical guide keeps notes visible on the main page', async (t) => {
+test('side pages hide chapter notes and restore them unchanged', async (t) => {
   const harness = await createHarness();
   t.after(async () => {
     await harness.close();
@@ -1068,6 +1105,11 @@ test('topical guide keeps notes visible on the main page', async (t) => {
     })()`
   );
 
+  const noteStyleBeforeSidePage = await evaluate(
+    harness.client,
+    'document.querySelector(".chapter-note").getAttribute("style")'
+  );
+
   await clickSelector(
     harness.client,
     '.chapter-slide:nth-child(2) .topical-guide-link[data-topic-id="1"]'
@@ -1076,30 +1118,32 @@ test('topical guide keeps notes visible on the main page', async (t) => {
     harness.client,
     async () => (await getText(harness.client, '.topical-guide-page h2')) === 'Nephi'
   );
-
-  const layout = await evaluate(
-    harness.client,
-    `(() => {
-      const main = document.querySelector('.chapter-carousel-viewport').getBoundingClientRect();
-      const noteElement = document.querySelector('.chapter-note');
-      const note = noteElement.getBoundingClientRect();
-      const chapter = noteElement.closest('.chapter-view').getBoundingClientRect();
-      const panel = document.querySelector('.topical-guide-page').getBoundingClientRect();
-      return {
-        mainRight: main.right,
-        noteLeft: note.left,
-        noteRight: note.right,
-        chapterLeft: chapter.left,
-        chapterRight: chapter.right,
-        computedLeft: getComputedStyle(noteElement).left,
-        inlineStyle: noteElement.getAttribute('style'),
-        panelLeft: panel.left
-      };
-    })()`
+  assert.equal(
+    await evaluate(
+      harness.client,
+      'getComputedStyle(document.querySelector(".chapter-note")).display'
+    ),
+    'none'
   );
 
-  assert(layout.noteRight <= layout.mainRight - 15, JSON.stringify(layout));
-  assert(layout.noteRight <= layout.panelLeft, JSON.stringify(layout));
+  await clickSelector(harness.client, '.chapter-slide:nth-child(2) .chapter-header');
+  await waitFor(
+    harness.client,
+    async () => (await evaluate(harness.client, 'document.querySelector(".reader-side-page")')) === null
+  );
+  assert.deepEqual(
+    await evaluate(
+      harness.client,
+      `(() => {
+        const note = document.querySelector('.chapter-note');
+        return {
+          display: getComputedStyle(note).display,
+          style: note.getAttribute('style')
+        };
+      })()`
+    ),
+    { display: 'block', style: noteStyleBeforeSidePage }
+  );
 });
 
 test('chapter text enters inline editing and persists modified text', async (t) => {

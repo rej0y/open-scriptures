@@ -83,6 +83,8 @@
   let topicalGuideError = '';
   let isLoadingTopicalGuide = false;
   let topicalGuideRequest = 0;
+  let topicalGuideCloseRequest = 0;
+  let isClosingTopicalGuide = false;
   let nextRelatedTopicPanelKey = 0;
   let relatedTopicalGuidePanels: Array<
     | {
@@ -108,7 +110,7 @@
   let noteSaveTimer: number | undefined;
   const pendingNoteSaves = new Map<string, ChapterNote[]>();
 
-  $: topicalGuidePanelCount = selectedTopicLink
+  $: topicalGuidePanelCount = selectedTopicLink && !isClosingTopicalGuide
     ? 1 + relatedTopicalGuidePanels.filter((panel) => !panel.isClosing).length
     : 0;
 
@@ -494,6 +496,8 @@
 
   async function openTopicalGuide(topicLink: TopicalGuideLink) {
     const request = ++topicalGuideRequest;
+    topicalGuideCloseRequest += 1;
+    isClosingTopicalGuide = false;
     selectedTopicLink = topicLink;
     topicalGuideTopic = null;
     topicalGuideError = '';
@@ -536,12 +540,9 @@
       relatedTopicalGuidePanels = relatedTopicalGuidePanels.map((panel) =>
         panel.key === key && panel.kind === 'topic' ? { ...panel, topic } : panel
       );
-    } catch (error) {
-      relatedTopicalGuidePanels = relatedTopicalGuidePanels.map((panel) =>
-        panel.key === key && panel.kind === 'topic'
-          ? { ...panel, errorMessage: error instanceof Error ? error.message : String(error) }
-          : panel
-      );
+    } catch {
+      relatedTopicalGuidePanels = relatedTopicalGuidePanels.filter((panel) => panel.key !== key);
+      void recenterCarouselAfterLayoutChange();
     } finally {
       relatedTopicalGuidePanels = relatedTopicalGuidePanels.map((panel) =>
         panel.key === key && panel.kind === 'topic' ? { ...panel, isLoading: false } : panel
@@ -550,14 +551,24 @@
   }
 
   function closeTopicalGuide() {
-    if (!selectedTopicLink) return;
+    if (!selectedTopicLink || isClosingTopicalGuide) return;
+    const closeRequest = ++topicalGuideCloseRequest;
     topicalGuideRequest += 1;
-    selectedTopicLink = null;
-    topicalGuideTopic = null;
-    topicalGuideError = '';
+    isClosingTopicalGuide = true;
     isLoadingTopicalGuide = false;
-    relatedTopicalGuidePanels = [];
+    relatedTopicalGuidePanels = relatedTopicalGuidePanels.map((panel) => ({
+      ...panel,
+      isClosing: true
+    }));
     void recenterCarouselAfterLayoutChange();
+    window.setTimeout(() => {
+      if (closeRequest !== topicalGuideCloseRequest) return;
+      selectedTopicLink = null;
+      topicalGuideTopic = null;
+      topicalGuideError = '';
+      relatedTopicalGuidePanels = [];
+      isClosingTopicalGuide = false;
+    }, 260);
   }
 
   function closeTopicalGuidePanelsAfter(panelIndex: number) {
@@ -669,6 +680,7 @@
           {highlightKey}
           onRemoveHighlight={removeHighlightOnDoubleClick}
           onOpenTopicalGuide={openTopicalGuide}
+          sidePageOpen={Boolean(selectedTopicLink)}
           notes={chapterNotes}
           onCreateNote={createChapterNote}
           onUpdateNote={updateChapterNote}
@@ -703,7 +715,10 @@
       errorMessage={topicalGuideError}
       compact={topicalGuidePanelCount >= 2}
       threeColumn={topicalGuidePanelCount >= 3}
-      hidden={topicalGuidePanelCount >= 3 && 0 < topicalGuidePanelCount - 3}
+      hidden={
+        isClosingTopicalGuide ||
+        (topicalGuidePanelCount >= 3 && 0 < topicalGuidePanelCount - 3)
+      }
       panelIndex={0}
       primary
       onOpenRelatedTopic={(title) => openRelatedTopicalGuide(title, 0)}

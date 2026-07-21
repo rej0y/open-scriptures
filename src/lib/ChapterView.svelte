@@ -20,6 +20,7 @@
   export let highlightKey = (_word: SavedWord) => '';
   export let onRemoveHighlight = async (_word: SavedWord) => {};
   export let onOpenTopicalGuide = (_topicLink: TopicalGuideLink) => {};
+  export let sidePageOpen = false;
   export let onCreateNote = (_note: ChapterNote) => {};
   type NoteLayout = Pick<ChapterNote, 'x' | 'y' | 'width' | 'height' | 'manualWidth'>;
   type NoteRect = { left: number; top: number; width: number; height: number };
@@ -841,6 +842,7 @@
 <article
   bind:this={chapterElement}
   class="chapter-view"
+  class:side-page-open={sidePageOpen}
   aria-labelledby="chapter-title"
   on:dblclick={createNoteAt}
   on:mousedown|capture={blockDoubleClickTextDrag}
@@ -1319,6 +1321,10 @@
     z-index: 2;
     outline: 1px solid transparent;
     outline-offset: 0;
+  }
+
+  .chapter-view.side-page-open .chapter-note {
+    display: none;
   }
 
   .chapter-note:focus-within {
