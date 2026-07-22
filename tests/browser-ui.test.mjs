@@ -329,7 +329,7 @@ function buildMockInvokeSource() {
               title: 'Nephi',
               related_topics: 'See also Book of Mormon; Mys- teries of Godliness; BD Missing',
               content:
-                '1 Ne. 1:1 I, Nephi,\\nhaving been born of goodly parents.\\n1 Ne. 1:2 Yea, I make a record; the record is true; 2:1 And I went forth.',
+                '1 Ne. 1:1 (2 Ne. 1:1;\\n2 Ne. 1:2) I, Nephi,\\nhaving been born of goodly parents.\\n1 Ne. 1:2 (2:1; 2:2, 3) Yea, I make a record; the record is true; 2:1 And I went forth.',
               source_page: 321
             };
           case 'get_topical_guide_topic_by_title':
@@ -729,6 +729,22 @@ test('topical guide words are underlined and open the side page', async (t) => {
     await getText(harness.client, '.topical-guide-page .related-topics h3'),
     'See also'
   );
+  assert.deepEqual(
+    await evaluate(
+      harness.client,
+      `(() => {
+        const panel = getComputedStyle(document.querySelector('.topical-guide-page'));
+        const eyebrow = getComputedStyle(document.querySelector('.topical-guide-page .eyebrow'));
+        const list = getComputedStyle(document.querySelector('.topical-guide-page .related-topics ul'));
+        return {
+          boxSizing: panel.boxSizing,
+          textTransform: eyebrow.textTransform,
+          listStyleType: list.listStyleType
+        };
+      })()`
+    ),
+    { boxSizing: 'border-box', textTransform: 'uppercase', listStyleType: 'none' }
+  );
   assert.equal(
     await getText(harness.client, '.topical-guide-page .related-topic-label'),
     'BD Missing'
@@ -810,6 +826,10 @@ test('topical guide words are underlined and open the side page', async (t) => {
       const main = mainElement.getBoundingClientRect();
       const panelElement = document.querySelector('.topical-guide-page');
       const panel = panelElement.getBoundingClientRect();
+      const chapterElement = document.querySelector('.chapter-slide:nth-child(2) .chapter-view');
+      const chapter = chapterElement.getBoundingClientRect();
+      const chapterHeader = chapterElement.querySelector('.chapter-header').getBoundingClientRect();
+      const chapterStyle = getComputedStyle(chapterElement);
       return {
         mainRight: main.right,
         panelLeft: panel.left,
@@ -821,6 +841,12 @@ test('topical guide words are underlined and open the side page', async (t) => {
           '::-webkit-scrollbar'
         ).width,
         panelScrollbarWidth: getComputedStyle(panelElement, '::-webkit-scrollbar').width,
+        chapterBorderWidth: chapterStyle.borderWidth,
+        chapterBoxShadow: chapterStyle.boxShadow,
+        chapterCenterOffset: Math.abs(
+          (chapterHeader.left + chapterHeader.right) / 2 - (main.left + main.right) / 2
+        ),
+        chapterInsideMain: chapter.left >= main.left && chapter.right <= main.right + 1,
         documentHeight: document.documentElement.scrollHeight,
         viewportHeight: window.innerHeight
       };
@@ -831,6 +857,10 @@ test('topical guide words are underlined and open the side page', async (t) => {
   assert.equal(paneLayout.mainOverflowY, 'auto');
   assert.equal(paneLayout.panelOverflowY, 'auto');
   assert.equal(paneLayout.panelScrollbarWidth, paneLayout.mainScrollbarWidth);
+  assert.equal(paneLayout.chapterBorderWidth, '0px');
+  assert.equal(paneLayout.chapterBoxShadow, 'none');
+  assert(paneLayout.chapterCenterOffset <= 2, JSON.stringify(paneLayout));
+  assert.equal(paneLayout.chapterInsideMain, true);
   assert(paneLayout.documentHeight <= paneLayout.viewportHeight + 1, JSON.stringify(paneLayout));
   assert.equal(
     await evaluate(harness.client, 'getComputedStyle(document.querySelector(".topical-guide-page")).boxShadow'),
@@ -856,7 +886,22 @@ test('topical guide words are underlined and open the side page', async (t) => {
       harness.client,
       'Array.from(document.querySelectorAll(".scripture-reference-button"), (button) => button.textContent)'
     ),
-    ['1 Ne. 1:1', '1 Ne. 1:2', '1 Ne. 2:1']
+    ['1 Ne. 1:1', '2 Ne. 1:1', '2 Ne. 1:2', '1 Ne. 1:2', '2:1', '2:2, 3', '1 Ne. 2:1']
+  );
+
+  await clickSelector(
+    harness.client,
+    '.reference-list p:first-child .scripture-reference-button:nth-of-type(2)'
+  );
+  await waitFor(
+    harness.client,
+    async () => (await getText(harness.client, '.scripture-reference-page h2')) === '2 Nephi 1'
+  );
+  await clickSelector(harness.client, '.topical-guide-page.primary header');
+  await waitFor(
+    harness.client,
+    async () =>
+      (await evaluate(harness.client, 'document.querySelector(".scripture-reference-page")')) === null
   );
 
   await clickSelector(

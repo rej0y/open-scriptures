@@ -16,6 +16,30 @@
   export let onOpenScriptureReference = (_book: string, _chapter: number, _verse: number) => {};
   let panelElement: HTMLElement;
   let renderedTopicKey = '';
+  let explicitReferencePattern: RegExp | null = null;
+  let bookByAlias = new Map<string, { label: string; book: string }>();
+
+  $: {
+    const aliases = scriptureBooks
+      .flatMap((book) => [
+        { label: book.title, book: book.title },
+        { label: book.short_title, book: book.title }
+      ])
+      .filter((alias, index, candidates) =>
+        candidates.findIndex(
+          (candidate) => candidate.label.toLocaleLowerCase() === alias.label.toLocaleLowerCase()
+        ) === index
+      )
+      .sort((left, right) => right.label.length - left.label.length);
+
+    bookByAlias = new Map(aliases.map((alias) => [alias.label.toLocaleLowerCase(), alias]));
+    explicitReferencePattern = aliases.length
+      ? new RegExp(
+          `^(${aliases.map((alias) => escapedPattern(alias.label)).join('|')})\\s+(\\d+):(\\d+)(?:[-–]\\d+)?(?:,\\s*\\d+)*`,
+          'i'
+        )
+      : null;
+  }
 
   $: {
     const nextTopicKey = `${title}:${topic?.id ?? 'loading'}`;
@@ -57,35 +81,19 @@
     return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 
-  function bookAliases() {
-    return scriptureBooks
-      .flatMap((book) => [
-        { label: book.title, book: book.title },
-        { label: book.short_title, book: book.title }
-      ])
-      .filter((alias, index, aliases) =>
-        aliases.findIndex((candidate) => candidate.label === alias.label) === index
-      )
-      .sort((left, right) => right.label.length - left.label.length);
-  }
-
   function explicitReference(value: string) {
-    for (const alias of bookAliases()) {
-      const match = value.match(
-        new RegExp(`^${escapedPattern(alias.label)}\\s+(\\d+):(\\d+)(?:[-–,]\\d+)*`, 'i')
-      );
-      if (match) {
-        return {
-          citation: match[0],
-          book: alias.book,
-          bookLabel: alias.label,
-          chapter: Number(match[1]),
-          verse: Number(match[2]),
-          length: match[0].length
-        };
-      }
-    }
-    return null;
+    const match = explicitReferencePattern?.exec(value);
+    const alias = match ? bookByAlias.get(match[1].toLocaleLowerCase()) : null;
+    if (!match || !alias) return null;
+
+    return {
+      citation: match[0],
+      book: alias.book,
+      bookLabel: alias.label,
+      chapter: Number(match[2]),
+      verse: Number(match[3]),
+      length: match[0].length
+    };
   }
 
   function startsWithExplicitReference(value: string) {
@@ -131,21 +139,98 @@
   function splitReferenceEntries(value: string) {
     const blocks: string[] = [];
     let block = '';
+    let parenthesisDepth = 0;
 
     for (const sourceLine of value.replace(/\r/g, '').split('\n')) {
       const line = sourceLine.trim();
       if (!line) continue;
 
-      if (block && startsWithExplicitReference(line)) {
+      if (block && parenthesisDepth === 0 && startsWithExplicitReference(line)) {
         blocks.push(block);
         block = line;
       } else {
         block += `${block ? ' ' : ''}${line}`;
       }
+
+      for (const character of line) {
+        if (character === '(') parenthesisDepth += 1;
+        if (character === ')') parenthesisDepth = Math.max(0, parenthesisDepth - 1);
+      }
     }
     if (block) blocks.push(block);
 
     return blocks.flatMap(splitReferenceBlock);
+  }
+
+  function inlineReferenceSegments(
+    value: string,
+    initialBook: { book: string; label: string }
+  ) {
+    const segments: Array<
+      | { text: string }
+      | { citation: string; book: string; chapter: number; verse: number }
+    > = [];
+    const contexts = [initialBook];
+    let depth = 0;
+    let text = '';
+
+    function appendText() {
+      if (text) segments.push({ text });
+      text = '';
+    }
+
+    for (let index = 0; index < value.length; ) {
+      const character = value[index];
+      if (character === '(') {
+        text += character;
+        depth += 1;
+        contexts[depth] = contexts[depth - 1];
+        index += 1;
+        continue;
+      }
+      if (character === ')') {
+        text += character;
+        contexts.splice(depth, 1);
+        depth = Math.max(0, depth - 1);
+        index += 1;
+        continue;
+      }
+
+      const remaining = value.slice(index);
+      const explicit = explicitReference(remaining);
+      if (explicit) {
+        appendText();
+        segments.push({
+          citation: explicit.citation,
+          book: explicit.book,
+          chapter: explicit.chapter,
+          verse: explicit.verse
+        });
+        contexts[depth] = { book: explicit.book, label: explicit.bookLabel };
+        index += explicit.length;
+        continue;
+      }
+
+      const shorthand = remaining.match(/^(\d+):(\d+)(?:[-–]\d+)?(?:,\s*\d+)*/);
+      const inheritedBook = contexts[depth];
+      if (shorthand && inheritedBook) {
+        appendText();
+        segments.push({
+          citation: shorthand[0],
+          book: inheritedBook.book,
+          chapter: Number(shorthand[1]),
+          verse: Number(shorthand[2])
+        });
+        index += shorthand[0].length;
+        continue;
+      }
+
+      text += character;
+      index += 1;
+    }
+
+    appendText();
+    return segments;
   }
 
   function parseReferenceEntries(value: string) {
@@ -166,7 +251,7 @@
           book: explicit.book,
           chapter: explicit.chapter,
           verse: explicit.verse,
-          description: content.slice(explicit.length)
+          description: inlineReferenceSegments(content.slice(explicit.length), inheritedBook)
         };
       }
 
@@ -179,7 +264,7 @@
           book: inheritedBook.book,
           chapter: Number(shorthand[1]),
           verse: Number(shorthand[2]),
-          description: content.slice(shorthand[0].length)
+          description: inlineReferenceSegments(content.slice(shorthand[0].length), inheritedBook)
         };
       }
 
@@ -270,7 +355,12 @@
                       referenceEntry.chapter!,
                       referenceEntry.verse!
                     )}
-                >{referenceEntry.citation}</button>{referenceEntry.description}
+                >{referenceEntry.citation}</button>{#each referenceEntry.description ?? [] as segment}{#if 'citation' in segment}<button
+                      class="scripture-reference-button"
+                      type="button"
+                      on:click={() =>
+                        onOpenScriptureReference(segment.book, segment.chapter, segment.verse)}
+                    >{segment.citation}</button>{:else}{segment.text}{/if}{/each}
               {:else}
                 {referenceEntry.raw}
               {/if}
@@ -290,6 +380,7 @@
     position: sticky;
     z-index: 30;
     top: 0;
+    box-sizing: border-box;
     flex: 0 0 min(31rem, 42vw);
     width: min(31rem, 42vw);
     height: 100dvh;

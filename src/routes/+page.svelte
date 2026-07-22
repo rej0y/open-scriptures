@@ -362,6 +362,29 @@
     };
   }
 
+  function keepCarouselCenteredOnResize(node: HTMLElement) {
+    let settleFrame: number | undefined;
+    const observer = new ResizeObserver(() => {
+      if (!selectedTopicLink) return;
+      if (settleFrame !== undefined) cancelAnimationFrame(settleFrame);
+      isCarouselRecentering = true;
+      centerCarousel();
+      settleFrame = requestAnimationFrame(() => {
+        centerCarousel();
+        isCarouselRecentering = false;
+        settleFrame = undefined;
+      });
+    });
+
+    observer.observe(node);
+    return {
+      destroy() {
+        observer.disconnect();
+        if (settleFrame !== undefined) cancelAnimationFrame(settleFrame);
+      }
+    };
+  }
+
   function handleCarouselScroll() {
     if (isCarouselRecentering) {
       return;
@@ -653,6 +676,7 @@
   >
     <div
       bind:this={carouselViewport}
+      use:keepCarouselCenteredOnResize
       class="chapter-carousel-viewport"
       class:carousel-recentering={isCarouselRecentering}
       class:topical-guide-open={Boolean(selectedTopicLink)}

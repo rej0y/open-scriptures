@@ -1025,6 +1025,12 @@
     box-shadow: 0 24px 70px rgba(31, 46, 42, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.8);
   }
 
+  .chapter-view.side-page-open {
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
   :global(.reader-shell-highlights-open) .chapter-view {
     padding: clamp(1.25rem, 3vw, 2.75rem);
   }
