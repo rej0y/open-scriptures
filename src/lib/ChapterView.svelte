@@ -21,6 +21,7 @@
   export let onRemoveHighlight = async (_word: SavedWord) => {};
   export let onOpenTopicalGuide = (_topicLink: TopicalGuideLink) => {};
   export let sidePageOpen = false;
+  export let sidePageCount = 0;
   export let onCreateNote = (_note: ChapterNote) => {};
   type NoteLayout = Pick<ChapterNote, 'x' | 'y' | 'width' | 'height' | 'manualWidth'>;
   type NoteRect = { left: number; top: number; width: number; height: number };
@@ -66,6 +67,152 @@
   const minimumNoteWidth = 16;
   const minimumNoteHeight = 28;
   const noteInset = 16;
+
+  function fitResponsiveNote(
+    node: HTMLElement,
+    initialState: { note: ChapterNote; sidePageCount: number }
+  ) {
+    let currentNote = initialState.note;
+    let currentSidePageCount = initialState.sidePageCount;
+    let layoutFrame: number | undefined;
+    let refitUntil = 0;
+    const initialChapterBounds = chapterElement.getBoundingClientRect();
+    const initialPageBounds = chapterElement.querySelector<HTMLElement>('.verses')?.getBoundingClientRect();
+    let pageOffsetX = currentNote.x -
+      (initialPageBounds ? initialPageBounds.left - initialChapterBounds.left : 0);
+    const verseAnchorFor = (y: number) => {
+      const chapterBounds = chapterElement.getBoundingClientRect();
+      const rows = Array.from(chapterElement.querySelectorAll<HTMLElement>('.verse-row'));
+      let index = -1;
+      let rowTop = 0;
+      for (const [rowIndex, row] of rows.entries()) {
+        const top = row.getBoundingClientRect().top - chapterBounds.top;
+        if (top > y) break;
+        index = rowIndex;
+        rowTop = top;
+      }
+      return { index, offset: index >= 0 ? y - rowTop : y };
+    };
+    let verseAnchor = verseAnchorFor(currentNote.y);
+
+    const pageBounds = () => {
+      const chapterBounds = chapterElement.getBoundingClientRect();
+      const versesBounds = chapterElement.querySelector<HTMLElement>('.verses')?.getBoundingClientRect();
+      return versesBounds
+        ? {
+            left: versesBounds.left - chapterBounds.left,
+            right: versesBounds.right - chapterBounds.left
+          }
+        : { left: 0, right: chapterElement.clientWidth };
+    };
+
+    const fit = () => {
+      layoutFrame = undefined;
+      const savedWidth = currentNote.width ?? minimumNoteWidth;
+      const savedHeight = currentNote.height ?? minimumNoteHeight;
+      const textarea = node.querySelector<HTMLTextAreaElement>('textarea');
+      const page = pageBounds();
+      let left = page.left + pageOffsetX;
+      const verseRows = chapterElement.querySelectorAll<HTMLElement>('.verse-row');
+      const anchoredRow = verseAnchor.index >= 0
+        ? verseRows[verseAnchor.index]
+        : undefined;
+      const chapterBounds = chapterElement.getBoundingClientRect();
+      let top = anchoredRow
+        ? anchoredRow.getBoundingClientRect().top - chapterBounds.top + verseAnchor.offset
+        : currentNote.y;
+
+      node.style.left = `${left}px`;
+      node.style.top = `${top}px`;
+      node.style.width = `${savedWidth}px`;
+      node.style.height = `${savedHeight}px`;
+      node.style.setProperty('--note-font-size', '1rem');
+
+      if (currentSidePageCount === 0 || !textarea) return;
+
+      let availableWidth = Math.max(8, chapterElement.clientWidth - left - noteInset);
+      let width = Math.min(savedWidth, availableWidth);
+      const overlapsAnchoredVerse = anchoredRow && readerTextRects().some(
+        (bounds) =>
+          left < bounds.left + bounds.width &&
+          left + width > bounds.left &&
+          top < bounds.top + bounds.height &&
+          top + savedHeight > bounds.top
+      );
+      if ((overlapsAnchoredVerse || (currentSidePageCount >= 2 && width < savedWidth)) && anchoredRow) {
+        const anchoredText = anchoredRow.querySelector<HTMLElement>('.verse-text');
+        const anchoredTextRange = document.createRange();
+        if (anchoredText) anchoredTextRange.selectNodeContents(anchoredText);
+        const anchoredTextLines = anchoredText ? Array.from(anchoredTextRange.getClientRects()) : [];
+        const lastTextLine = anchoredTextLines[anchoredTextLines.length - 1];
+        top = (lastTextLine?.top ?? anchoredRow.getBoundingClientRect().bottom) - chapterBounds.top;
+        left = (lastTextLine?.right ?? (anchoredText ?? anchoredRow).getBoundingClientRect().left) - chapterBounds.left + 6;
+        availableWidth = Math.max(8, chapterElement.clientWidth - left - noteInset);
+        width = Math.min(savedWidth, availableWidth);
+        node.style.left = `${left}px`;
+        node.style.top = `${top}px`;
+      }
+      const nextTextTop = readerTextRects()
+        .filter(
+          (bounds) =>
+            bounds.top > top + 1 &&
+            left < bounds.left + bounds.width &&
+            left + width > bounds.left
+        )
+        .reduce((top, bounds) => Math.min(top, bounds.top), Number.POSITIVE_INFINITY);
+      const availableHeight = Number.isFinite(nextTextTop)
+        ? Math.max(8, nextTextTop - top - 6)
+        : Number.POSITIVE_INFINITY;
+
+      node.style.width = `${width}px`;
+      node.style.height = `${Number.isFinite(availableHeight) ? availableHeight : savedHeight}px`;
+
+      let fontSize = 1;
+      if (textarea.scrollHeight > availableHeight + 1) {
+        while (fontSize > 0.1 && textarea.scrollHeight > availableHeight + 1) {
+          fontSize = Math.max(0.1, fontSize - 0.05);
+          node.style.setProperty('--note-font-size', `${fontSize}rem`);
+        }
+      }
+
+      const contentHeight = textarea.scrollHeight;
+      node.style.height = `${Math.min(Math.max(savedHeight, contentHeight), availableHeight)}px`;
+
+      if (performance.now() < refitUntil) {
+        layoutFrame = requestAnimationFrame(fit);
+      }
+    };
+    const scheduleFit = () => {
+      if (layoutFrame !== undefined) cancelAnimationFrame(layoutFrame);
+      layoutFrame = requestAnimationFrame(fit);
+    };
+    const observer = new ResizeObserver(scheduleFit);
+    observer.observe(chapterElement);
+    const versesElement = chapterElement.querySelector<HTMLElement>('.verses');
+    if (versesElement) observer.observe(versesElement);
+    scheduleFit();
+
+    return {
+      update(state: { note: ChapterNote; sidePageCount: number }) {
+        if (state.note.x !== currentNote.x) {
+          pageOffsetX = state.note.x - pageBounds().left;
+        }
+        if (state.note.y !== currentNote.y) {
+          verseAnchor = verseAnchorFor(state.note.y);
+        }
+        currentNote = state.note;
+        if (state.sidePageCount !== currentSidePageCount) {
+          refitUntil = performance.now() + 700;
+        }
+        currentSidePageCount = state.sidePageCount;
+        scheduleFit();
+      },
+      destroy() {
+        observer.disconnect();
+        if (layoutFrame !== undefined) cancelAnimationFrame(layoutFrame);
+      }
+    };
+  }
 
   $: if (chapter) {
     const editKey = chapterTextEditKey(chapter);
@@ -982,8 +1129,9 @@
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
         bind:this={noteElements[note.id]}
+        use:fitResponsiveNote={{ note, sidePageCount }}
         class="chapter-note"
-        style={`left: clamp(${noteInset}px, ${note.x}px, calc(100% - ${noteWidth + noteInset}px)); top: ${note.y}px; width: ${noteWidth}px; height: ${note.height ?? minimumNoteHeight}px;`}
+        style={`left: ${note.x}px; top: ${note.y}px; width: ${noteWidth}px; height: ${note.height ?? minimumNoteHeight}px; --note-font-size: 1rem;`}
         on:mousedown={(event) => startNoteMouseMove(event, note)}
       >
         <button class="note-handle note-handle-left" type="button" aria-label="Resize note from left" on:pointerdown={(event) => startNoteInteraction(event, note, 'left')}></button>
@@ -1026,7 +1174,7 @@
   }
 
   .chapter-view.side-page-open {
-    border: 0;
+    border-color: transparent;
     border-radius: 0;
     box-shadow: none;
   }
@@ -1329,10 +1477,6 @@
     outline-offset: 0;
   }
 
-  .chapter-view.side-page-open .chapter-note {
-    display: none;
-  }
-
   .chapter-note:focus-within {
     outline-color: var(--accent-color);
     box-shadow: 0 0 0 1px rgba(47, 118, 109, 0.18);
@@ -1373,7 +1517,7 @@
     box-shadow: none;
     font-family:
       "Liberation Serif", Georgia, "Times New Roman", serif;
-    font-size: 1rem;
+    font-size: var(--note-font-size, 1rem);
     font-style: italic;
     font-weight: 400;
     line-height: 1.4;

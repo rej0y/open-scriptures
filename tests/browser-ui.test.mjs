@@ -999,7 +999,6 @@ test('topical guide words are underlined and open the side page', async (t) => {
     async () =>
       (await evaluate(harness.client, 'document.querySelectorAll(".reader-side-page").length')) === 2
   );
-
   await clickSelector(harness.client, '.topical-guide-page.primary header');
   await waitFor(
     harness.client,
@@ -1186,7 +1185,7 @@ test('topical guide words are underlined and open the side page', async (t) => {
   assert(commands.includes('get_topical_guide_topic_by_title'));
 });
 
-test('side pages hide chapter notes and restore them unchanged', async (t) => {
+test('side pages keep note top-left fixed and fit its box to the chapter page', async (t) => {
   const harness = await createHarness();
   t.after(async () => {
     await harness.close();
@@ -1197,22 +1196,37 @@ test('side pages hide chapter notes and restore them unchanged', async (t) => {
     `(async () => {
       const chapter = document.querySelector('.chapter-slide:nth-child(2) .chapter-view');
       const bounds = chapter.getBoundingClientRect();
+      const verse = chapter.querySelector('.verse-row:nth-child(2)').getBoundingClientRect();
       chapter.dispatchEvent(new MouseEvent('dblclick', {
         bubbles: true,
         clientX: bounds.right - 40,
-        clientY: bounds.top + 40
+        clientY: verse.bottom - 15
       }));
       await new Promise((resolve) => setTimeout(resolve, 30));
       const textarea = document.querySelector('.chapter-note textarea');
-      textarea.value = 'visible note';
+      textarea.value = 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor';
       textarea.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText' }));
       await new Promise((resolve) => setTimeout(resolve, 30));
     })()`
   );
 
-  const noteStyleBeforeSidePage = await evaluate(
+  const noteBeforeSidePage = await evaluate(
     harness.client,
-    'document.querySelector(".chapter-note").getAttribute("style")'
+    `(() => {
+      const chapter = document.querySelector('.chapter-slide:nth-child(2) .chapter-view').getBoundingClientRect();
+      const page = document.querySelector('.chapter-slide:nth-child(2) .verses').getBoundingClientRect();
+      const verse = document.querySelector('.chapter-slide:nth-child(2) .verse-row:nth-child(2)').getBoundingClientRect();
+      const note = document.querySelector('.chapter-note').getBoundingClientRect();
+      return {
+        left: note.left - chapter.left,
+        pageLeft: page.left - chapter.left,
+        pageOffsetX: note.left - page.left,
+        top: note.top - chapter.top,
+        verseOffsetY: note.top - verse.top,
+        width: note.width,
+        height: note.height
+      };
+    })()`
   );
 
   await clickSelector(
@@ -1223,12 +1237,98 @@ test('side pages hide chapter notes and restore them unchanged', async (t) => {
     harness.client,
     async () => (await getText(harness.client, '.topical-guide-page h2')) === 'Nephi'
   );
-  assert.equal(
-    await evaluate(
-      harness.client,
-      'getComputedStyle(document.querySelector(".chapter-note")).display'
-    ),
-    'none'
+  const noteWithSidePage = await evaluate(
+    harness.client,
+    `(() => {
+      const chapter = document.querySelector('.chapter-slide:nth-child(2) .chapter-view').getBoundingClientRect();
+      const page = document.querySelector('.chapter-slide:nth-child(2) .verses').getBoundingClientRect();
+      const verse = document.querySelector('.chapter-slide:nth-child(2) .verse-row:nth-child(2)').getBoundingClientRect();
+      const noteElement = document.querySelector('.chapter-note');
+      const note = noteElement.getBoundingClientRect();
+      return {
+        display: getComputedStyle(noteElement).display,
+        left: note.left - chapter.left,
+        pageLeft: page.left - chapter.left,
+        pageOffsetX: note.left - page.left,
+        top: note.top - chapter.top,
+        verseOffsetY: note.top - verse.top,
+        width: note.width,
+        height: note.height,
+        fontSize: Number.parseFloat(getComputedStyle(noteElement.querySelector('textarea')).fontSize),
+        textFits: noteElement.querySelector('textarea').scrollHeight <= noteElement.querySelector('textarea').clientHeight + 1,
+        overlapsText: Array.from(document.querySelectorAll('.chapter-slide:nth-child(2) .verse-text'))
+          .flatMap((element) => {
+            const range = document.createRange();
+            range.selectNodeContents(element);
+            return Array.from(range.getClientRects());
+          })
+          .some((bounds) =>
+            note.left < bounds.right && note.right > bounds.left &&
+            note.top < bounds.bottom && note.bottom > bounds.top
+          )
+      };
+    })()`
+  );
+  assert.equal(noteWithSidePage.display, 'block');
+  assert(Math.abs(noteWithSidePage.pageOffsetX - noteBeforeSidePage.pageOffsetX) < 0.1);
+  assert(Math.abs(noteWithSidePage.verseOffsetY - noteBeforeSidePage.verseOffsetY) < 0.1);
+  assert(noteWithSidePage.width <= noteBeforeSidePage.width);
+  assert(noteWithSidePage.height >= 8);
+  assert.equal(noteWithSidePage.textFits, true);
+  assert.equal(noteWithSidePage.overlapsText, false);
+  if (noteWithSidePage.height > noteBeforeSidePage.height) {
+    assert.equal(noteWithSidePage.fontSize, 16);
+  }
+
+  await clickSelector(harness.client, '.topical-guide-page .related-topic-button');
+  await waitFor(
+    harness.client,
+    async () =>
+      (await evaluate(harness.client, 'document.querySelectorAll(".reader-side-page").length')) === 2
+  );
+  await delay(750);
+  const noteWithTwoSidePages = await evaluate(
+    harness.client,
+    `(() => {
+      const chapter = document.querySelector('.chapter-slide:nth-child(2) .chapter-view').getBoundingClientRect();
+      const page = document.querySelector('.chapter-slide:nth-child(2) .verses').getBoundingClientRect();
+      const verse = document.querySelector('.chapter-slide:nth-child(2) .verse-row:nth-child(2)').getBoundingClientRect();
+      const anchoredRow = document.querySelectorAll('.chapter-slide:nth-child(2) .verse-row')[1];
+      const anchoredVerse = anchoredRow.getBoundingClientRect();
+      const anchoredTextElement = anchoredRow.querySelector('.verse-text');
+      const anchoredText = anchoredTextElement.getBoundingClientRect();
+      const anchoredRange = document.createRange();
+      anchoredRange.selectNodeContents(anchoredTextElement);
+      const anchoredLines = Array.from(anchoredRange.getClientRects());
+      const anchoredLastLine = anchoredLines[anchoredLines.length - 1];
+      const noteElement = document.querySelector('.chapter-note');
+      const note = noteElement.getBoundingClientRect();
+      const textarea = noteElement.querySelector('textarea');
+      return {
+        display: getComputedStyle(noteElement).display,
+        left: note.left,
+        right: note.right,
+        top: note.top - chapter.top,
+        verseOffsetY: note.top - verse.top,
+        followsAnchoredText: note.left >= anchoredLastLine.right && note.left - anchoredLastLine.right <= 7,
+        alignedWithAnchoredLine: Math.abs(note.top - anchoredLastLine.top) < 0.1,
+        pageLeft: page.left,
+        pageRight: page.right,
+        pageOffsetX: note.left - page.left,
+        textFits: textarea.scrollHeight <= textarea.clientHeight + 1
+      };
+    })()`
+  );
+  assert.equal(noteWithTwoSidePages.display, 'block');
+  assert.equal(noteWithTwoSidePages.followsAnchoredText, true);
+  assert.equal(noteWithTwoSidePages.alignedWithAnchoredLine, true);
+  assert.equal(noteWithTwoSidePages.textFits, true);
+
+  await clickSelector(harness.client, '.topical-guide-page.primary header');
+  await waitFor(
+    harness.client,
+    async () =>
+      (await evaluate(harness.client, 'document.querySelectorAll(".reader-side-page").length')) === 1
   );
 
   await clickSelector(harness.client, '.chapter-slide:nth-child(2) .chapter-header');
@@ -1236,19 +1336,29 @@ test('side pages hide chapter notes and restore them unchanged', async (t) => {
     harness.client,
     async () => (await evaluate(harness.client, 'document.querySelector(".reader-side-page")')) === null
   );
-  assert.deepEqual(
-    await evaluate(
-      harness.client,
-      `(() => {
-        const note = document.querySelector('.chapter-note');
-        return {
-          display: getComputedStyle(note).display,
-          style: note.getAttribute('style')
-        };
-      })()`
-    ),
-    { display: 'block', style: noteStyleBeforeSidePage }
+  const restoredNote = await evaluate(
+    harness.client,
+    `(() => {
+      const chapter = document.querySelector('.chapter-slide:nth-child(2) .chapter-view').getBoundingClientRect();
+      const page = document.querySelector('.chapter-slide:nth-child(2) .verses').getBoundingClientRect();
+      const verse = document.querySelector('.chapter-slide:nth-child(2) .verse-row:nth-child(2)').getBoundingClientRect();
+      const noteElement = document.querySelector('.chapter-note');
+      const note = noteElement.getBoundingClientRect();
+      return {
+        display: getComputedStyle(noteElement).display,
+        left: note.left - chapter.left,
+        pageLeft: page.left - chapter.left,
+        pageOffsetX: note.left - page.left,
+        top: note.top - chapter.top,
+        verseOffsetY: note.top - verse.top,
+        width: note.width
+      };
+    })()`
   );
+  assert.equal(restoredNote.display, 'block');
+  assert(Math.abs(restoredNote.pageOffsetX - noteBeforeSidePage.pageOffsetX) < 0.1);
+  assert(Math.abs(restoredNote.verseOffsetY - noteBeforeSidePage.verseOffsetY) < 0.1);
+  assert(Math.abs(restoredNote.width - noteBeforeSidePage.width) <= 1);
 });
 
 test('chapter text enters inline editing and persists modified text', async (t) => {

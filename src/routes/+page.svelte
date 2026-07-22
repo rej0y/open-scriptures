@@ -712,6 +712,7 @@
           onRemoveHighlight={removeHighlightOnDoubleClick}
           onOpenTopicalGuide={openTopicalGuide}
           sidePageOpen={Boolean(selectedTopicLink)}
+          sidePageCount={topicalGuidePanelCount}
           notes={chapterNotes}
           onCreateNote={createChapterNote}
           onUpdateNote={updateChapterNote}
