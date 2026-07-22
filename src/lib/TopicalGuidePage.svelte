@@ -191,6 +191,15 @@
     return value.replace(/([\p{L}])-\s+(?=[\p{Ll}])/gu, '$1');
   }
 
+  function normalizedTopicTitle(value: string) {
+    return repairPdfWordBreaks(value).replace(/\s+/g, ' ').trim().toLocaleLowerCase();
+  }
+
+  function relatedTopicIsClickable(relatedTopic: string) {
+    if (/^(?:BD|Bible Dictionary)\b/i.test(relatedTopic.trim())) return false;
+    return normalizedTopicTitle(relatedTopic) !== normalizedTopicTitle(topic?.title ?? title);
+  }
+
   $: relatedTopics = topic?.related_topics
     ? splitTopLevelEntries(topic.related_topics.replace(/^See(?: also)?\s*/i, '')).map(
         repairPdfWordBreaks
@@ -228,13 +237,17 @@
         <ul>
           {#each relatedTopics as relatedTopic}
             <li>
-              <button
-                class="related-topic-button"
-                type="button"
-                on:click={() => onOpenRelatedTopic(relatedTopic)}
-              >
-                {relatedTopic}
-              </button>
+              {#if relatedTopicIsClickable(relatedTopic)}
+                <button
+                  class="related-topic-button"
+                  type="button"
+                  on:click={() => onOpenRelatedTopic(relatedTopic)}
+                >
+                  {relatedTopic}
+                </button>
+              {:else}
+                <span class="related-topic-label">{relatedTopic}</span>
+              {/if}
             </li>
           {/each}
         </ul>
@@ -367,13 +380,17 @@
     list-style: none;
   }
 
+  .related-topics button,
+  .related-topic-label {
+    color: #24332f;
+    font: 400 0.98rem/1.45 Georgia, "Times New Roman", serif;
+  }
+
   .related-topics button {
     border: 0;
     padding: 0;
-    color: #24332f;
     background: transparent;
     cursor: pointer;
-    font: 400 0.98rem/1.45 Georgia, "Times New Roman", serif;
     text-align: left;
     text-decoration: underline;
     text-underline-offset: 0.1em;

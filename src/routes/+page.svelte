@@ -765,6 +765,10 @@
         threeColumn={topicalGuidePanelCount >= 3}
         hidden={panelHidden}
         panelIndex={index + 1}
+        verseSegments={(chapterVerse) =>
+          verseSegmentsForChapter(panel.chapter, chapterVerse, savedWordsByVerse)}
+        onOpenTopicalGuide={(topicLink) =>
+          openRelatedTopicalGuide(topicLink.title, index + 1)}
       />
     {/if}
   {/each}

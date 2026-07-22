@@ -1,5 +1,10 @@
 <script lang="ts">
-  import type { ScriptureChapter } from '$lib/study';
+  import type {
+    ChapterVerse,
+    ScriptureChapter,
+    TopicalGuideLink,
+    VerseSegment
+  } from '$lib/study';
 
   export let title = '';
   export let chapter: ScriptureChapter | null = null;
@@ -10,6 +15,9 @@
   export let threeColumn = false;
   export let hidden = false;
   export let panelIndex = 0;
+  export let verseSegments = (chapterVerse: ChapterVerse) =>
+    [{ text: chapterVerse.text }] as VerseSegment[];
+  export let onOpenTopicalGuide = (_topicLink: TopicalGuideLink) => {};
 
   function revealVerse(node: HTMLElement, isReferenced: boolean) {
     if (isReferenced) {
@@ -60,7 +68,13 @@
           >
             <p>
               <span class="verse-number">{chapterVerse.number}</span>
-              <span class="verse-text">{chapterVerse.text}</span>
+              <span class="verse-text">{#each verseSegments(chapterVerse) as segment}{#if segment.topicLink}<button
+                      class="topical-guide-link"
+                      type="button"
+                      title={`Open ${segment.topicLink.title} in the Topical Guide`}
+                      data-topic-id={segment.topicLink.topic_id}
+                      on:click|stopPropagation={() => onOpenTopicalGuide(segment.topicLink!)}
+                    >{segment.text}</button>{:else}{segment.text}{/if}{/each}</span>
             </p>
           </div>
         {/each}
@@ -220,6 +234,33 @@
     display: inline;
     min-width: 0.5ch;
     border-radius: 3px;
+  }
+
+  .topical-guide-link {
+    appearance: none;
+    display: inline;
+    border: 0;
+    border-radius: 2px;
+    padding: 0;
+    color: inherit;
+    background: transparent;
+    cursor: pointer;
+    font: inherit;
+    line-height: inherit;
+    text-align: inherit;
+    text-decoration: underline;
+    text-decoration-color: currentColor;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.07em;
+  }
+
+  .topical-guide-link:hover {
+    color: #000;
+  }
+
+  .topical-guide-link:focus-visible {
+    outline: 2px solid #2f766d;
+    outline-offset: 2px;
   }
 
   .status {

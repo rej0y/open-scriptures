@@ -238,7 +238,10 @@ function buildMockInvokeSource() {
           {
             number: 1,
             text: 'I, Nephi, having been born of goodly parents.',
-            topic_links: [{ topic_id: 1, title: 'Nephi', start_offset: 3, end_offset: 8 }]
+            topic_links: [
+              { topic_id: 1, title: 'Nephi', start_offset: 3, end_offset: 8 },
+              { topic_id: 2, title: 'Book of Mormon', start_offset: 37, end_offset: 44 }
+            ]
           },
           { number: 2, text: 'And I make a record of my proceedings.', topic_links: [] }
         ]
@@ -726,18 +729,17 @@ test('topical guide words are underlined and open the side page', async (t) => {
     await getText(harness.client, '.topical-guide-page .related-topics h3'),
     'See also'
   );
+  assert.equal(
+    await getText(harness.client, '.topical-guide-page .related-topic-label'),
+    'BD Missing'
+  );
   assert.deepEqual(
     await evaluate(
       harness.client,
       'Array.from(document.querySelectorAll(".topical-guide-page .related-topic-button"), (button) => button.textContent.trim())'
     ),
-    ['Book of Mormon', 'Mysteries of Godliness', 'BD Missing']
+    ['Book of Mormon', 'Mysteries of Godliness']
   );
-  await clickSelector(
-    harness.client,
-    '.topical-guide-page .related-topics li:nth-child(3) .related-topic-button'
-  );
-  await delay(150);
   assert.equal(
     await evaluate(harness.client, 'document.querySelectorAll(".reader-side-page").length'),
     1
@@ -926,6 +928,33 @@ test('topical guide words are underlined and open the side page', async (t) => {
     true
   );
 
+  assert.equal(
+    await getText(
+      harness.client,
+      '.scripture-reference-page .topical-guide-link[data-topic-id="2"]'
+    ),
+    'parents'
+  );
+  await clickSelector(
+    harness.client,
+    '.scripture-reference-page .topical-guide-link[data-topic-id="2"]'
+  );
+  await waitFor(
+    harness.client,
+    async () =>
+      (await evaluate(harness.client, 'document.querySelectorAll(".reader-side-page").length')) === 3
+  );
+  assert.equal(
+    await getText(harness.client, '.reader-side-page:last-of-type h2'),
+    'Book of Mormon'
+  );
+  await clickSelector(harness.client, '.scripture-reference-page header');
+  await waitFor(
+    harness.client,
+    async () =>
+      (await evaluate(harness.client, 'document.querySelectorAll(".reader-side-page").length')) === 2
+  );
+
   await clickSelector(harness.client, '.topical-guide-page.primary header');
   await waitFor(
     harness.client,
@@ -1030,24 +1059,19 @@ test('topical guide words are underlined and open the side page', async (t) => {
       )) === 3
   );
 
-  await clickSelector(
-    harness.client,
-    '.topical-guide-page[data-panel-index="2"] .related-topic-button'
-  );
-  await waitFor(
-    harness.client,
-    async () =>
-      (await evaluate(
-        harness.client,
-        'document.querySelectorAll(".topical-guide-page").length'
-      )) === 4
+  assert.equal(
+    await getText(
+      harness.client,
+      '.topical-guide-page[data-panel-index="2"] .related-topic-label'
+    ),
+    'Nephi'
   );
   assert.equal(
     await evaluate(
       harness.client,
-      'document.querySelectorAll(".topical-guide-page.panel-hidden").length'
+      'document.querySelector(".topical-guide-page[data-panel-index=\\"2\\"] .related-topic-button")'
     ),
-    1
+    null
   );
 
   await clickSelector(harness.client, '.topical-guide-page[data-panel-index="1"] header');
